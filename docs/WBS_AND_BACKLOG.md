@@ -117,17 +117,17 @@ Các tính năng chính thức loại trừ khỏi phạm vi học kỳ này:
 
 Bảng dưới đây ánh xạ **100% các gói công việc trong WBS (15 Work Packages)** thành danh sách **15 GitHub Issues** cụ thể trong Product Backlog, phân bổ đều cho 4 thành viên Full-stack (`Dev 1` đến `Dev 4`) theo đúng chuyên môn mô-đun:
 
-- **Dev 1 (Team Leader / Scrum Master):** Phụ trách Hạ tầng, Quản trị hệ thống & Mô-đun *File Parser*.
-- **Dev 2 (AI Integration Engineer):** Phụ trách Ngân hàng câu hỏi & Mô-đun *AI Quiz Generator*.
-- **Dev 3 (Core Engine Engineer):** Phụ trách Mô-đun *Exam Engine & Client-side Anti-cheat*.
-- **Dev 4 (Data & Tutor Engineer):** Phụ trách Mô-đun *Auto-Grading, AI Tutor & Analytics Dashboard*.
+- **Dev 1 (Team Leader / Scrum Master):** Phụ trách Hạ tầng Monorepo, CSDL ERD & Bộ bóc tách tài liệu (*File Parser Engine & Preview UI*).
+- **Dev 2 (AI Integration Engineer):** Phụ trách Tích hợp LLM API, Prompt Engineering ma trận, RAG Document Quiz & Ngân hàng câu hỏi (*Question Bank*).
+- **Dev 3 (Core Engine Engineer):** Phụ trách Xác thực người dùng (*Auth JWT/RBAC*) & Phòng thi trực tuyến, Xáo trộn đề & Chống gian lận (*Exam Engine & Anti-cheat*).
+- **Dev 4 (Data & Tutor Engineer):** Phụ trách Bộ chấm điểm (*Auto-Grading*), Chế độ xem lại (*Review Mode*), Gia sư ảo (*AI Tutor*) & Bảng điều khiển phân tích (*Analytics Dashboard*).
 
 | Issue ID | Work Package Title | Mô tả sản phẩm bàn giao (Deliverable) | MoSCoW Label | Estimated Effort (1-2 weeks) | Assignee Suggestion |
 | :---: | :--- | :--- | :---: | :---: | :---: |
 | **#1** | `[Infra] Project Boilerplate & Database Schema Setup (WBS 1.1)` | Khung mã nguồn Full-stack (Frontend/Backend), cấu hình Git/ESLint, sơ đồ CSDL tổng thể (ERD) và kịch bản Migration/Seed data chạy thành công. | `must-have` | 1 tuần | **Dev 1** |
-| **#2** | `[Auth] Authentication & Role-Based Access Control (WBS 1.2)` | API & Giao diện Đăng nhập/Đăng ký bằng JWT, bảo vệ route (Middleware) và quản lý phân quyền 3 vai trò: Giảng viên, Sinh viên, Admin. | `must-have` | 1 tuần | **Dev 1** |
+| **#2** | `[Auth] Authentication & Role-Based Access Control (WBS 1.2)` | API & Giao diện Đăng nhập/Đăng ký bằng JWT, bảo vệ route (Middleware) và quản lý phân quyền 3 vai trò: Giảng viên, Sinh viên, Admin. | `must-have` | 1 tuần | **Dev 3** *(San sẻ Auth)* |
 | **#3** | `[Parser] Multi-format Document Parser Engine PDF/DOCX/TXT (WBS 2.1)` | Dịch vụ Backend đọc tệp `PDF`, `DOCX`, `TXT` và bộ thuật toán Regex tự động bóc tách danh sách câu hỏi, các phương án lựa chọn và đáp án đúng. | `must-have` | 2 tuần | **Dev 1** |
-| **#4** | `[Parser] Question Extraction Preview & Question Bank CRUD (WBS 2.2)` | Giao diện tải tệp, màn hình duyệt trước (Preview) cho phép sửa/xóa câu hỏi vừa trích xuất và bộ API/UI quản lý CRUD ngân hàng câu hỏi theo chủ đề. | `must-have` | 1.5 tuần | **Dev 1** |
+| **#4** | `[Parser] Question Extraction Preview & Question Bank CRUD (WBS 2.2)` | Giao diện tải tệp, màn hình duyệt trước (Preview) cho phép sửa/xóa câu hỏi vừa trích xuất và bộ API/UI quản lý CRUD ngân hàng câu hỏi theo chủ đề. | `must-have` | 1.5 tuần | **Dev 1 & Dev 2** |
 | **#5** | `[AI-Gen] LLM Integration Service & JSON Schema Validator (WBS 3.1)` | Dịch vụ kết nối Google Gemini / OpenAI API có xử lý Rate-limit/Timeout và bộ kiểm tra ép kiểu đầu ra tuân thủ 100% chuẩn `JSON Schema`. | `must-have` | 1.5 tuần | **Dev 2** |
 | **#6** | `[AI-Gen] Prompt Engineering & Exam Matrix Builder UI (WBS 3.2)` | Bộ Prompt sinh câu hỏi theo 3 mức độ nhận thức (Nhận biết, Thông hiểu, Vận dụng), hỗ trợ câu hỏi Chọn 1/Chọn nhiều/Đúng-Sai cùng giao diện cấu hình ma trận đề. | `must-have` | 2 tuần | **Dev 2** |
 | **#7** | `[AI-Gen] Context-based Document AI Quiz Generation (WBS 3.3)` | Tính năng trích xuất ngữ cảnh từ tệp giáo trình/bài giảng tải lên để yêu cầu AI sinh bộ câu hỏi trắc nghiệm bám sát nội dung tài liệu. | `should-have` | 1.5 tuần | **Dev 2** |
