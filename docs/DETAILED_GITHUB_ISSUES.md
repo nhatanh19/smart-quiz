@@ -1,4 +1,4 @@
-# 📋 CHI TIẾT PRODUCT BACKLOG & GITHUB ISSUES — SMART QUIZ (TÁI CẤU TRÚC CÂN BẰNG)
+# 📋 CHI TIẾT PRODUCT BACKLOG & GITHUB ISSUES — SMART QUIZ
 **Dự án:** Nền tảng Kiểm tra và Ôn luyện Trắc nghiệm Trực tuyến Tích hợp Trí tuệ Nhân tạo (*Smart Quiz*)  
 **Mã nguồn / Repo:** [github.com/nhatanh19/smart-quiz](https://github.com/nhatanh19/smart-quiz)  
 **Tài liệu tham chiếu:** `docs/WBS_AND_BACKLOG.md` | Chuẩn môn học: **Week 03 (WBS) & Week 04–05 (Agile/Scrum on GitHub)**  
@@ -91,7 +91,7 @@
 
 #### 🔹 Issue #8: `[Bank] Question Bank Management CRUD API & Filtering UI`
 - **Phân loại MoSCoW:** `must-have` | **Mô-đun:** `module:ai-gen` | **Milestone:** `Sprint 1: Core Foundation`
-- **Độ phức tạp / Thời gian:** `2 Story Points` (~1.5 ngày) | **Assignee:** `Dev 2` *(Nhận quản lý Ngân hàng đề để gắn liền với luồng AI)*
+- **Độ phức tạp / Thời gian:** `2 Story Points` (~1.5 ngày) | **Assignee:** `Dev 2 (AI Engineer)`
 - **Mô tả công việc:** Xây dựng API và giao diện CRUD Ngân hàng câu hỏi: Thêm câu hỏi thủ công, sửa, xóa, tìm kiếm theo từ khóa và lọc theo chủ đề / môn học / độ khó.
 - **Tiêu chí hoàn thành (Acceptance Criteria / DoD):**
   - [ ] Thêm, sửa, xóa câu hỏi trong ngân hàng đề hoạt động trơn tru.
@@ -103,7 +103,7 @@
 
 #### 🔹 Issue #9: `[Auth] User Registration, Login & JWT Token Management`
 - **Phân loại MoSCoW:** `must-have` | **Mô-đun:** `module:exam` | **Milestone:** `Sprint 1: Core Foundation`
-- **Độ phức tạp / Thời gian:** `3 Story Points` (~2 ngày) | **Assignee:** `Dev 3` *(San sẻ Auth từ Dev 1)*
+- **Độ phức tạp / Thời gian:** `3 Story Points` (~2 ngày) | **Assignee:** `Dev 3 (Core Engineer)`
 - **Mô tả công việc:** API và giao diện Đăng ký (`/register`), Đăng nhập (`/login`). Băm mật khẩu an toàn bằng `bcrypt`, sinh mã `Access Token` và `Refresh Token` qua JWT.
 - **Tiêu chí hoàn thành (Acceptance Criteria / DoD):**
   - [ ] Đăng ký lưu mật khẩu đã băm vào DB; đăng nhập trả về JWT hợp lệ.
@@ -111,7 +111,7 @@
 
 #### 🔹 Issue #10: `[Auth] Role-Based Route Protection (RBAC) & User Profile UI`
 - **Phân loại MoSCoW:** `must-have` | **Mô-đun:** `module:exam` | **Milestone:** `Sprint 1: Core Foundation`
-- **Độ phức tạp / Thời gian:** `2 Story Points` (~1.5 ngày) | **Assignee:** `Dev 3` *(San sẻ Auth từ Dev 1)*
+- **Độ phức tạp / Thời gian:** `2 Story Points` (~1.5 ngày) | **Assignee:** `Dev 3 (Core Engineer)`
 - **Mô tả công việc:** Xây dựng Middleware chặn truy cập theo 3 vai trò: `INSTRUCTOR`, `STUDENT`, `ADMIN`. Giao diện trang Profile cá nhân và chức năng Đăng xuất.
 - **Tiêu chí hoàn thành (Acceptance Criteria / DoD):**
   - [ ] Sinh viên không thể vào các route tạo đề thi của Giảng viên.
@@ -155,7 +155,7 @@
 
 #### 🔹 Issue #15: `[AI-Tutor] Contextual Explanation Generator API`
 - **Phân loại MoSCoW:** `should-have` | **Mô-đun:** `module:tutor-analytics` | **Milestone:** `Sprint 1: Core Foundation`
-- **Độ phức tạp / Thời gian:** `3 Story Points` (~2 ngày) | **Assignee:** `Dev 4` *(Đẩy lên Sprint 1 để chạy song song)*
+- **Độ phức tạp / Thời gian:** `3 Story Points` (~2 ngày) | **Assignee:** `Dev 4 (Data & Tutor Engineer)`
 - **Mô tả công việc:** Tích hợp Gia sư ảo (AI Tutor): Xây dựng Prompt phân tích ngữ cảnh câu hỏi, giải thích cặn kẽ tại sao phương án sinh viên chọn là sai và tại sao phương án chuẩn là đáp án đúng.
 - **Tiêu chí hoàn thành (Acceptance Criteria / DoD):**
   - [ ] Bấm nút "Giải thích bằng AI" trên câu sai hiển thị lời giải thích chi tiết trong vòng < 3 giây.
@@ -163,7 +163,7 @@
 
 #### 🔹 Issue #16: `[AI-Tutor] Knowledge Gap Diagnostic Card in Review UI`
 - **Phân loại MoSCoW:** `should-have` | **Mô-đun:** `module:tutor-analytics` | **Milestone:** `Sprint 1: Core Foundation`
-- **Độ phức tạp / Thời gian:** `2 Story Points` (~1.5 ngày) | **Assignee:** `Dev 4` *(Đẩy lên Sprint 1)*
+- **Độ phức tạp / Thời gian:** `2 Story Points` (~1.5 ngày) | **Assignee:** `Dev 4 (Data & Tutor Engineer)`
 - **Mô tả công việc:** Tổng hợp các câu hỏi làm sai theo tag chủ đề, chỉ ra lỗ hổng kiến thức chính của học viên và đề xuất thẻ gợi ý ôn tập (*Actionable Study Advice*).
 - **Tiêu chí hoàn thành (Acceptance Criteria / DoD):**
   - [ ] Thẻ tổng kết hiển thị rõ: "Chủ đề bạn cần củng cố: Kế thừa & Đa hình trong OOP".
