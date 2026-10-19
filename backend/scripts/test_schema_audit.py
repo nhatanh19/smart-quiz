@@ -121,7 +121,7 @@ def test_4_seed_twice():
     q1 = db.query(Question).count()
     assert u1 == 3, f"Expected 3 users, got {u1}"
     assert c1 == 1, f"Expected 1 category, got {c1}"
-    assert q1 == 3, f"Expected 3 questions, got {q1}"
+    assert q1 == 10, f"Expected 10 questions, got {q1}"
     db.close()
 
     # Second run
@@ -132,9 +132,9 @@ def test_4_seed_twice():
     q2 = db.query(Question).count()
     assert u2 == 3, f"Expected 3 users on 2nd run, got {u2}"
     assert c2 == 1, f"Expected 1 category on 2nd run, got {c2}"
-    assert q2 == 3, f"Expected 3 questions on 2nd run, got {q2}"
+    assert q2 == 10, f"Expected 10 questions on 2nd run, got {q2}"
     db.close()
-    print("  ✅ TEST 4 PASSED: Seed is idempotent; 3 users, 1 category, 3 questions.")
+    print("  ✅ TEST 4 PASSED: Seed is idempotent; 3 users, 1 category, 10 questions.")
 
 
 def test_5_db_constraints_rejections():
