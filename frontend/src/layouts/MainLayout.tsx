@@ -1,6 +1,7 @@
 import React from "react";
+import AuthAction from "@/pages/auth/AuthAction";
 import { Link, NavLink, Outlet } from "react-router-dom";
-import { BookOpen, Sparkles, GraduationCap, BarChart2, LogIn } from "lucide-react";
+import { BookOpen, Sparkles, GraduationCap, BarChart2 } from "lucide-react";
 
 /**
  * MainLayout:
@@ -82,13 +83,7 @@ export const MainLayout: React.FC = () => {
 
           {/* Auth Action */}
           <div className="flex items-center gap-3">
-            <Link
-              to="/auth/login"
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 px-3 py-1.5 rounded-md border border-slate-200 hover:bg-slate-50 transition-colors"
-            >
-              <LogIn className="w-4 h-4" />
-              <span>Đăng nhập</span>
-            </Link>
+            <AuthAction />
           </div>
         </div>
       </header>

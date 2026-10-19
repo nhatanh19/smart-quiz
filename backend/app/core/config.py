@@ -36,7 +36,9 @@ class Settings(BaseSettings):
     # JWT Authentication & Cryptography
     SECRET_KEY: str = "smart_quiz_super_secret_jwt_key_for_development_replace_in_prod"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    COOKIE_SECURE: bool = False
 
     # AI LLM Provider Configuration (OpenAI SDK with Custom Host support)
     LLM_BASE_URL: str = "https://api.openai.com/v1"

@@ -27,6 +27,8 @@ downloads/
 eggs/
 .eggs/
 lib/
+!frontend/src/lib/
+!frontend/src/lib/**
 lib64/
 parts/
 sdist/
@@ -63,3 +65,6 @@ Thumbs.db
 *.db
 uploads/
 temp/
+.npm-cache/
+.pytest_cache/
+pytest-cache-files-*/
