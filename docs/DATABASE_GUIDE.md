@@ -7,8 +7,9 @@
 
 ## 1. Tổng quan Kiến trúc CSDL
 
+- **File SQL DDL thuần (Pure SQL Script):** Đã đóng gói sẵn tại [`database/schema.sql`](file:///e:/Data_IT_MSI/Project_Nam4/QuanTriDuAnPhanMem/smart-quiz/database/schema.sql) và dữ liệu mẫu tại [`database/seed.sql`](file:///e:/Data_IT_MSI/Project_Nam4/QuanTriDuAnPhanMem/smart-quiz/database/seed.sql) để import trực tiếp lên Server DB (pgAdmin, DBeaver, Supabase, Neon, v.v.). Xem hướng dẫn chi tiết tại [database/README.md](file:///e:/Data_IT_MSI/Project_Nam4/QuanTriDuAnPhanMem/smart-quiz/database/README.md).
 - **Hệ quản trị CSDL:** PostgreSQL 13+ (Khuyến nghị 16, hỗ trợ 100% Supabase, Neon hoặc Local Postgres).
-- **Trình ánh xạ ORM:** SQLAlchemy 2.0 kiểu khai báo mới (`DeclarativeBase`, `Mapped[...]`, `mapped_column(...)`).
+- **Trình ánh xạ ORM & Migration:** SQLAlchemy 2.0 kiểu khai báo mới (`DeclarativeBase`, `Mapped[...]`, `mapped_column(...)`) và Alembic.
 - **Khóa chính toàn hệ thống:** `UUID` v4 tự động sinh bằng hàm `gen_random_uuid()` của PostgreSQL, tầng ứng dụng có fallback `default=uuid.uuid4`.
 - **Đơn vị thời gian:** Mọi cột thời gian đều dùng `timestamptz` (`DateTime(timezone=True)`) và lưu theo chuẩn UTC. Cột `updated_at` tự động cập nhật qua `onupdate=func.now()` ở tầng ORM.
 - **Thang điểm:** `Float` (`double precision` trong PostgreSQL), chuẩn hóa thang điểm 10, tầng ứng dụng làm tròn 2 chữ số thập phân trước khi lưu.
@@ -366,9 +367,16 @@ Hệ thống sử dụng cột `JSONB` cho các cấu trúc động. Dưới đ�
 
 ---
 
-## 7. Cheatsheet Lệnh Thao tác CSDL (Dành cho Dev)
+### 7.0. Khởi tạo & nạp CSDL trực tiếp bằng file .SQL (pgAdmin / DBeaver / psql / Supabase)
+Nếu bạn triển khai trực tiếp lên PostgreSQL Server độc lập hoặc công cụ quản trị giao diện (pgAdmin, DBeaver, Supabase SQL Editor):
+```bash
+# Sử dụng dòng lệnh psql:
+psql -h <HOST> -p <PORT> -U <USER> -d smart_quiz -f database/schema.sql
+psql -h <HOST> -p <PORT> -U <USER> -d smart_quiz -f database/seed.sql
+```
+*Hoặc*: Mở file [`database/schema.sql`](file:///e:/Data_IT_MSI/Project_Nam4/QuanTriDuAnPhanMem/smart-quiz/database/schema.sql) và [`database/seed.sql`](file:///e:/Data_IT_MSI/Project_Nam4/QuanTriDuAnPhanMem/smart-quiz/database/seed.sql) trong **pgAdmin / DBeaver / Supabase SQL Editor** rồi bấm **F5 (Execute)**.
 
-### 7.1. Cập nhật CSDL lên phiên bản mới nhất
+### 7.1. Cập nhật CSDL qua Python Alembic Migration
 ```powershell
 cd backend
 alembic upgrade head
