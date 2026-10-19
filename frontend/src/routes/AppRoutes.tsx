@@ -1,0 +1,48 @@
+import React from "react";
+import { Routes, Route, Navigate } from "react-router-dom";
+
+// Layouts
+import MainLayout from "@/layouts/MainLayout";
+import AuthLayout from "@/layouts/AuthLayout";
+import ExamFocusLayout from "@/layouts/ExamFocusLayout";
+
+// Placeholders for the 4 modules
+import LoginPlaceholder from "@/pages/auth/LoginPlaceholder";
+import ParserPlaceholder from "@/pages/parser/ParserPlaceholder";
+import AiGenPlaceholder from "@/pages/ai-generator/AiGenPlaceholder";
+import ExamPlaceholder from "@/pages/exam/ExamPlaceholder";
+import AnalyticsPlaceholder from "@/pages/tutor-analytics/AnalyticsPlaceholder";
+
+/**
+ * AppRoutes:
+ * Global router configuration mapping all 4 modules and authentication views to layout shells.
+ */
+export const AppRoutes: React.FC = () => {
+  return (
+    <Routes>
+      {/* 1. Authentication Routes (Wrapped in AuthLayout) */}
+      <Route element={<AuthLayout />}>
+        <Route path="/auth/login" element={<LoginPlaceholder />} />
+      </Route>
+
+      {/* 2. Main Workspace Routes (Wrapped in MainLayout) */}
+      <Route element={<MainLayout />}>
+        <Route path="/" element={<Navigate to="/parser" replace />} />
+        <Route path="/parser" element={<ParserPlaceholder />} />
+        <Route path="/ai-generator" element={<AiGenPlaceholder />} />
+        <Route path="/analytics" element={<AnalyticsPlaceholder />} />
+      </Route>
+
+      {/* 3. Focused Exam Room (Wrapped in Isolated ExamFocusLayout for Module 3) */}
+      <Route element={<ExamFocusLayout />}>
+        <Route path="/exam" element={<ExamPlaceholder />} />
+        <Route path="/exam/:attemptId" element={<ExamPlaceholder />} />
+      </Route>
+
+      {/* 4. Fallback 404 Route */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+};
+
+export default AppRoutes;
