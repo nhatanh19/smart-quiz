@@ -78,6 +78,7 @@ Hệ thống **Smart Quiz** được tổ chức theo mô hình **Standard Monor
   - Lưu thông tin chi tiết nhật ký chống gian lận trong bảng `anti_cheat_logs` (`metadata_info: JSONB`).
 - **ORM:** **SQLAlchemy 2.0** sử dụng cú pháp chuẩn hiện đại: `DeclarativeBase`, `Mapped[...]`, `mapped_column(...)`, hỗ trợ hoàn hảo kiểm tra kiểu tĩnh với `mypy`/`pylance`.
 - **Quản lý Migration:** **Alembic** liên kết trực tiếp `Base.metadata` từ `app.models.entities`, cho phép phát sinh phiên bản CSDL tự động qua lệnh `alembic revision --autogenerate`.
+- **Tài liệu hướng dẫn chi tiết CSDL:** Xem chi tiết sơ đồ Mermaid ERD, mô tả 8 bảng, 5 kiểu enum, cấu trúc JSONB và phân công tương tác cho từng Dev tại [docs/DATABASE_GUIDE.md](./docs/DATABASE_GUIDE.md).
 
 ---
 

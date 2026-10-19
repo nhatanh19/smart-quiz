@@ -31,7 +31,7 @@ class Settings(BaseSettings):
         return v
 
     # Database configuration (PostgreSQL / Supabase / Neon)
-    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/smart_quiz"
+    DATABASE_URL: str = "postgresql+psycopg2://postgres:admin@localhost:5432/smart_quiz"
 
     # JWT Authentication & Cryptography
     SECRET_KEY: str = "smart_quiz_super_secret_jwt_key_for_development_replace_in_prod"
@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     LLM_API_KEY: str = ""
     LLM_MODEL_NAME: str = "gpt-4o-mini"
     LLM_TIMEOUT_SECONDS: float = 30.0
+
+    # Seed script password
+    SEED_DEFAULT_PASSWORD: str = "SmartQuiz@123"
 
     model_config = SettingsConfigDict(
         env_file=".env",

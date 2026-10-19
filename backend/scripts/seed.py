@@ -1,5 +1,7 @@
+import argparse
 import os
 import sys
+from datetime import datetime, timedelta, timezone
 
 # Ensure UTF-8 output on Windows console
 if hasattr(sys.stdout, "reconfigure"):
@@ -12,48 +14,48 @@ if hasattr(sys.stdout, "reconfigure"):
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from sqlalchemy.orm import Session
-from app.core.database import SessionLocal, engine, Base
+from app.core.config import settings
+from app.core.database import SessionLocal
 from app.core.security import get_password_hash
 from app.models.entities import (
+    Category,
+    CognitiveLevel,
+    Exam,
+    ExamQuestion,
+    Question,
+    QuestionSource,
+    QuestionType,
     User,
     UserRole,
-    Category,
-    Question,
-    QuestionType,
-    CognitiveLevel,
-    QuestionSourceType,
 )
 
 
-def seed_data() -> None:
-    """Initialize database tables and seed baseline sample data."""
-    print("⏳ Creating database tables if they do not exist...")
-    Base.metadata.create_all(bind=engine)
-
+def seed_data(with_demo_exam: bool = False) -> None:
+    """Initialize baseline sample data following Section 6 specifications."""
     db: Session = SessionLocal()
     try:
-        print("🌱 Checking and seeding users...")
-        default_password = "SmartQuiz@123"
+        print("🌱 Checking and seeding users (idempotent)...")
+        default_password = getattr(settings, "SEED_DEFAULT_PASSWORD", "SmartQuiz@123")
         hashed_password = get_password_hash(default_password)
 
         users_to_seed = [
             {
                 "email": "admin@smartquiz.edu.vn",
-                "full_name": "Quản Trị Viên Hệ Thống",
+                "full_name": "Quản trị viên",
                 "role": UserRole.ADMIN,
                 "password_hash": hashed_password,
                 "is_active": True,
             },
             {
                 "email": "instructor@smartquiz.edu.vn",
-                "full_name": "Giảng Viên Hướng Dẫn",
+                "full_name": "Giảng viên Mẫu",
                 "role": UserRole.INSTRUCTOR,
                 "password_hash": hashed_password,
                 "is_active": True,
             },
             {
                 "email": "student@smartquiz.edu.vn",
-                "full_name": "Sinh Viên Tiêu Biểu",
+                "full_name": "Sinh viên Mẫu",
                 "role": UserRole.STUDENT,
                 "password_hash": hashed_password,
                 "is_active": True,
@@ -69,22 +71,29 @@ def seed_data() -> None:
                 db.commit()
                 db.refresh(new_user)
                 seeded_users[new_user.role] = new_user
-                print(f"  ✅ Created user: {new_user.email} [{new_user.role.value}]")
+                print(f"  ✅ Created user: {new_user.email} [{new_user.role.value}] (ID: {new_user.id})")
             else:
                 seeded_users[existing_user.role] = existing_user
-                print(f"  ℹ️ User already exists: {existing_user.email} [{existing_user.role.value}]")
+                print(f"  ℹ️ User already exists: {existing_user.email} [{existing_user.role.value}] (ID: {existing_user.id})")
 
         instructor = seeded_users.get(UserRole.INSTRUCTOR)
         if not instructor:
             instructor = db.query(User).filter(User.role == UserRole.INSTRUCTOR).first()
 
-        print("🌱 Checking and seeding sample category...")
+        print("🌱 Checking and seeding category (idempotent by (created_by, name))...")
         category_name = "Quản trị Dự án Phần mềm"
-        category = db.query(Category).filter(Category.name == category_name).first()
+        category = (
+            db.query(Category)
+            .filter(
+                Category.created_by == instructor.id,
+                Category.name == category_name,
+            )
+            .first()
+        )
         if not category:
             category = Category(
                 name=category_name,
-                description="Học phần trang bị kiến thức về quy trình quản lý dự án công nghệ, khung chuẩn PMBOK, mô hình Agile/Scrum, kiểm soát chất lượng, chi phí và thời gian.",
+                description="Chuyên đề mẫu phục vụ kiểm thử hệ thống.",
                 created_by=instructor.id,
             )
             db.add(category)
@@ -94,102 +103,63 @@ def seed_data() -> None:
         else:
             print(f"  ℹ️ Category already exists: '{category.name}' (ID: {category.id})")
 
-        print("🌱 Checking and seeding 3 sample questions (Single Choice, Multiple Choice, True/False)...")
+        print("🌱 Checking and seeding 3 sample questions (idempotent by (creator_id, content))...")
         sample_questions = [
             # 1. Single Choice - Bloom Remember (Nhận biết)
             {
                 "category_id": category.id,
                 "creator_id": instructor.id,
-                "content": "Trong phương pháp Quản trị Dự án theo Khung chuẩn PMBOK, WBS (Work Breakdown Structure) được định nghĩa là gì?",
+                "content": "WBS là viết tắt của cụm từ nào trong quản trị dự án?",
                 "question_type": QuestionType.SINGLE_CHOICE,
                 "cognitive_level": CognitiveLevel.REMEMBER,
                 "options": [
-                    {
-                        "id": "A",
-                        "text": "Phân rã có thứ bậc mang tính định hướng sản phẩm bàn giao (Deliverable-oriented) về toàn bộ phạm vi dự án",
-                        "is_correct": True,
-                    },
-                    {
-                        "id": "B",
-                        "text": "Biểu đồ phân bổ nguồn lực và nhân sự chi tiết của dự án theo từng ngày làm việc",
-                        "is_correct": False,
-                    },
-                    {
-                        "id": "C",
-                        "text": "Danh mục tổng hợp các rủi ro kỹ thuật có thể xuất hiện trong quá trình phát triển mã nguồn",
-                        "is_correct": False,
-                    },
-                    {
-                        "id": "D",
-                        "text": "Biểu đồ đường Gantt hiển thị tiến độ thực tế so với đường cơ sở tiến độ (Baseline)",
-                        "is_correct": False,
-                    },
+                    {"id": "A", "text": "Work Breakdown Structure", "is_correct": True},
+                    {"id": "B", "text": "Work Budget Schedule", "is_correct": False},
+                    {"id": "C", "text": "Weekly Backlog Summary", "is_correct": False},
+                    {"id": "D", "text": "Workflow Baseline System", "is_correct": False},
                 ],
-                "explanation": "WBS là cấu trúc phân rã công việc có thứ bậc, định hướng sản phẩm bàn giao (Deliverable-oriented) thể hiện 100% phạm vi công việc cần thực hiện theo quy tắc 100% Rule.",
-                "source_type": QuestionSourceType.MANUAL,
+                "explanation": "WBS (Work Breakdown Structure) là cấu trúc phân rã công việc, chia phạm vi dự án thành các thành phần nhỏ hơn, dễ quản lý.",
+                "source_type": QuestionSource.MANUAL,
             },
             # 2. Multiple Choice - Bloom Understand (Thông hiểu)
             {
                 "category_id": category.id,
                 "creator_id": instructor.id,
-                "content": "Những đặc trưng nào sau đây là đặc trưng cốt lõi của phương pháp phát triển phần mềm Agile/Scrum? (Chọn các đáp án đúng)",
+                "content": "Những phát biểu nào đúng về Quy tắc 100% khi xây dựng WBS?",
                 "question_type": QuestionType.MULTIPLE_CHOICE,
                 "cognitive_level": CognitiveLevel.UNDERSTAND,
                 "options": [
-                    {
-                        "id": "A",
-                        "text": "Phát triển lặp (Iterative) và gia tăng (Incremental) theo các chu kỳ Sprint cố định từ 1-4 tuần",
-                        "is_correct": True,
-                    },
-                    {
-                        "id": "B",
-                        "text": "Khóa cứng toàn bộ tài liệu đặc tả yêu cầu chi tiết ngay từ đầu dự án và nghiêm cấm mọi sự thay đổi",
-                        "is_correct": False,
-                    },
-                    {
-                        "id": "C",
-                        "text": "Tập trung vào sự cộng tác thường xuyên với khách hàng thay vì chỉ đàm phán hợp đồng cứng nhắc",
-                        "is_correct": True,
-                    },
-                    {
-                        "id": "D",
-                        "text": "Đội ngũ phát triển tự tổ chức (Self-organizing) và liên chức năng (Cross-functional)",
-                        "is_correct": True,
-                    },
+                    {"id": "A", "text": "WBS phải bao quát toàn bộ phạm vi dự án", "is_correct": True},
+                    {"id": "B", "text": "Các thành phần con cộng lại phải đủ 100% công việc của thành phần cha", "is_correct": True},
+                    {"id": "C", "text": "Được thêm công việc ngoài phạm vi nếu còn thời gian", "is_correct": False},
+                    {"id": "D", "text": "WBS chỉ liệt kê các hoạt động hành chính", "is_correct": False},
                 ],
-                "explanation": "Tuyên ngôn Agile đề cao tương tác cá nhân, phần mềm chạy tốt, cộng tác khách hàng và phản hồi với thay đổi; mô hình Scrum chia nhỏ dự án thành các Sprint ngắn 1-4 tuần.",
-                "source_type": QuestionSourceType.MANUAL,
+                "explanation": "Quy tắc 100% yêu cầu WBS bao quát toàn bộ phạm vi và công việc của các thành phần con cộng lại đúng bằng 100% công việc của thành phần cha, không thừa, không thiếu.",
+                "source_type": QuestionSource.MANUAL,
             },
             # 3. True/False - Bloom Apply (Vận dụng)
             {
                 "category_id": category.id,
                 "creator_id": instructor.id,
-                "content": "Tình huống: Khi một kỹ sư phát hiện rủi ro kiến trúc có nguy cơ khiến Sprint không đạt mục tiêu đã cam kết, Scrum Master nên tự quyết định âm thầm hủy bỏ tính năng mà không cần thảo luận với Product Owner và nhóm phát triển trong buổi Daily Scrum.",
+                "content": "Nhóm có 4 thành viên, ngân sách 0 USD, hạn chót cố định ở Tuần 13. Khách hàng đề nghị thêm chấm tự luận bằng AI. Đưa ngay vào phạm vi mà không đánh giá lại là phù hợp với kiểm soát phạm vi.",
                 "question_type": QuestionType.TRUE_FALSE,
                 "cognitive_level": CognitiveLevel.APPLY,
                 "options": [
-                    {
-                        "id": "A",
-                        "text": "Đúng",
-                        "is_correct": False,
-                    },
-                    {
-                        "id": "B",
-                        "text": "Sai",
-                        "is_correct": True,
-                    },
+                    {"id": "A", "text": "Đúng", "is_correct": False},
+                    {"id": "B", "text": "Sai", "is_correct": True},
                 ],
-                "explanation": "Sai. Trong Scrum, tính minh bạch (Transparency) và cộng tác là tối thượng. Chỉ có Product Owner mới có quyền ưu tiên lại hoặc điều chỉnh Product Backlog. Mọi trở ngại cần được minh bạch trong Daily Scrum để toàn đội cùng tìm giải pháp thích ứng.",
-                "source_type": QuestionSourceType.MANUAL,
+                "explanation": "Mọi yêu cầu mới phải được đánh giá tác động lên phạm vi, thời gian, chi phí và nguồn lực. Đưa thẳng vào phạm vi gây trượt phạm vi (scope creep).",
+                "source_type": QuestionSource.MANUAL,
             },
         ]
 
+        seeded_questions = []
         for q_data in sample_questions:
             existing_q = (
                 db.query(Question)
                 .filter(
+                    Question.creator_id == q_data["creator_id"],
                     Question.content == q_data["content"],
-                    Question.category_id == q_data["category_id"],
                 )
                 .first()
             )
@@ -198,13 +168,49 @@ def seed_data() -> None:
                 db.add(new_q)
                 db.commit()
                 db.refresh(new_q)
+                seeded_questions.append(new_q)
                 print(
-                    f"  ✅ Created question [{new_q.question_type.value} - {new_q.cognitive_level.value}]: {new_q.content[:60]}..."
+                    f"  ✅ Created question [{new_q.question_type.value} - {new_q.cognitive_level.value}]: {new_q.content[:50]}... (ID: {new_q.id})"
                 )
             else:
+                seeded_questions.append(existing_q)
                 print(
-                    f"  ℹ️ Question already exists [{existing_q.question_type.value}]: {existing_q.content[:60]}..."
+                    f"  ℹ️ Question already exists [{existing_q.question_type.value}]: {existing_q.content[:50]}... (ID: {existing_q.id})"
                 )
+
+        if with_demo_exam:
+            print("🌱 Checking and seeding Demo Exam (--with-demo-exam)...")
+            exam_code = "DEMO0001"
+            existing_exam = db.query(Exam).filter(Exam.exam_code == exam_code).first()
+            now = datetime.now(timezone.utc)
+            if not existing_exam:
+                demo_exam = Exam(
+                    exam_code=exam_code,
+                    title="Đề thi mẫu",
+                    instructor_id=instructor.id,
+                    duration_minutes=15,
+                    start_time=now - timedelta(days=1),
+                    end_time=now + timedelta(days=30),
+                    access_password_hash=None,
+                    is_published=True,
+                )
+                db.add(demo_exam)
+                db.commit()
+                db.refresh(demo_exam)
+                print(f"  ✅ Created demo exam: '{demo_exam.title}' [{demo_exam.exam_code}] (ID: {demo_exam.id})")
+
+                for idx, q in enumerate(seeded_questions, start=1):
+                    eq = ExamQuestion(
+                        exam_id=demo_exam.id,
+                        question_id=q.id,
+                        order_index=idx,
+                        points=1.0,
+                    )
+                    db.add(eq)
+                db.commit()
+                print(f"  ✅ Added {len(seeded_questions)} questions to demo exam.")
+            else:
+                print(f"  ℹ️ Demo exam already exists: '{existing_exam.title}' [{existing_exam.exam_code}]")
 
         print("✨ Database seed completed successfully!")
 
@@ -216,5 +222,16 @@ def seed_data() -> None:
         db.close()
 
 
+def main():
+    parser = argparse.ArgumentParser(description="Seed database for Smart Quiz")
+    parser.add_argument(
+        "--with-demo-exam",
+        action="store_true",
+        help="Seed an additional published demo exam with the 3 sample questions",
+    )
+    args = parser.parse_args()
+    seed_data(with_demo_exam=args.with_demo_exam)
+
+
 if __name__ == "__main__":
-    seed_data()
+    main()

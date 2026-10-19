@@ -3,6 +3,8 @@ from typing import Generic, Optional, TypeVar, Any, List
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from app.models.entities import UserRole, QuestionType, CognitiveLevel, AttemptStatus
 
+import uuid
+
 T = TypeVar("T")
 
 
@@ -40,7 +42,7 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     role: UserRole
     full_name: str
-    user_id: int
+    user_id: uuid.UUID
 
 
 class UserBase(BaseModel):
@@ -57,7 +59,7 @@ class UserCreate(UserBase):
 
 class UserResponse(UserBase):
     """Public user response schema."""
-    id: int
+    id: uuid.UUID
     is_active: bool
     created_at: datetime
 

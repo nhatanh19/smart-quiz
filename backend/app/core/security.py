@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Callable
+import uuid
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -84,7 +85,12 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    user = db.query(User).filter(User.id == int(user_id_str)).first()
+    try:
+        user_uuid = uuid.UUID(str(user_id_str))
+        user = db.query(User).filter(User.id == user_uuid).first()
+    except (ValueError, TypeError):
+        user = db.query(User).filter(User.email == str(user_id_str)).first()
+
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

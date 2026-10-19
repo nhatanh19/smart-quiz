@@ -1,5 +1,5 @@
 // ==============================================================================
-// ENUMS (Synchronized with Backend app/models/entities.py)
+// ENUMS (Synchronized with Backend app/models/entities.py & PostgreSQL types)
 // ==============================================================================
 
 export type UserRole = "ADMIN" | "INSTRUCTOR" | "STUDENT";
@@ -14,32 +14,36 @@ export type AttemptStatus =
   | "LOCKED_VIOLATION"
   | "EXPIRED";
 
-export type QuestionSourceType = "MANUAL" | "FILE_PARSER" | "AI_GENERATED";
+export type QuestionSource = "MANUAL" | "FILE_PARSER" | "AI_GENERATED";
+export type QuestionSourceType = QuestionSource;
 
 export type AntiCheatEventType =
   | "TAB_SWITCH"
   | "WINDOW_BLUR"
-  | "COPY_PASTE_ATTEMPT";
+  | "COPY_PASTE_ATTEMPT"
+  | "DEVTOOLS_SHORTCUT";
 
 // ==============================================================================
-// ENTITY INTERFACES (Synchronized with Backend ERD Tables)
+// ENTITY INTERFACES (Synchronized with Backend PostgreSQL UUID Tables)
 // ==============================================================================
 
 export interface User {
-  id: number;
+  id: string; // UUID
   email: string;
   full_name: string;
   role: UserRole;
   is_active: boolean;
   created_at: string;
+  updated_at: string;
 }
 
 export interface Category {
-  id: number;
+  id: string; // UUID
   name: string;
   description?: string | null;
-  created_by: number;
+  created_by: string; // UUID -> User.id
   created_at: string;
+  updated_at: string;
 }
 
 export interface QuestionOption {
@@ -49,81 +53,105 @@ export interface QuestionOption {
 }
 
 export interface Question {
-  id: number;
-  category_id?: number | null;
-  creator_id: number;
+  id: string; // UUID
+  category_id: string; // UUID -> Category.id
+  creator_id: string; // UUID -> User.id
   content: string;
   question_type: QuestionType;
   cognitive_level: CognitiveLevel;
   options: QuestionOption[];
   explanation?: string | null;
-  source_type: QuestionSourceType;
+  source_type: QuestionSource;
   created_at: string;
+  updated_at: string;
 }
 
 export interface ExamMatrixConfig {
-  remember_ratio?: number;
-  understand_ratio?: number;
-  apply_ratio?: number;
+  version?: number;
   total_questions?: number;
+  category_ids?: string[];
+  cognitive_distribution?: {
+    REMEMBER?: number;
+    UNDERSTAND?: number;
+    APPLY?: number;
+  };
+  type_distribution?: {
+    SINGLE_CHOICE?: number;
+    MULTIPLE_CHOICE?: number;
+    TRUE_FALSE?: number;
+  };
 }
 
 export interface Exam {
-  id: number;
+  id: string; // UUID
+  exam_code: string;
   title: string;
   description?: string | null;
-  instructor_id: number;
+  instructor_id: string; // UUID -> User.id
   duration_minutes: number;
   start_time?: string | null;
   end_time?: string | null;
-  access_password?: string | null;
+  access_password_hash?: string | null;
   max_attempts: number;
   max_tab_violations: number;
   shuffle_questions: boolean;
   shuffle_options: boolean;
-  matrix_config?: ExamMatrixConfig | null;
+  matrix_config?: ExamMatrixConfig | Record<string, any> | null;
   is_published: boolean;
   created_at: string;
+  updated_at: string;
 }
 
 export interface ExamQuestion {
-  id: number;
-  exam_id: number;
-  question_id: number;
+  id: string; // UUID
+  exam_id: string; // UUID -> Exam.id
+  question_id: string; // UUID -> Question.id
   order_index: number;
   points: number;
   question?: Question;
 }
 
 export interface ExamAttempt {
-  id: number;
-  exam_id: number;
-  student_id: number;
+  id: string; // UUID
+  exam_id: string; // UUID -> Exam.id
+  student_id: string; // UUID -> User.id
+  attempt_number: number;
   started_at: string;
+  expires_at: string;
   submitted_at?: string | null;
   score?: number | null;
   status: AttemptStatus;
   violation_count: number;
-  question_order_snapshot?: any;
+  question_order_snapshot: {
+    version: number;
+    questions: Array<{
+      question_id: string;
+      options_order: string[];
+    }>;
+  };
 }
 
 export interface AttemptAnswer {
-  id: number;
-  attempt_id: number;
-  question_id: number;
-  selected_options?: string[] | null;
+  id: string; // UUID
+  attempt_id: string; // UUID -> ExamAttempt.id
+  question_id: string; // UUID -> Question.id
+  selected_options: string[];
   is_correct?: boolean | null;
+  points_awarded?: number | null;
   ai_tutor_feedback?: {
+    version?: number;
     explanation?: string;
-    gap_analysis?: string;
-    recommended_topics?: string[];
+    why_selected_wrong?: string;
+    study_suggestions?: string[];
+    model?: string;
+    generated_at?: string;
   } | null;
 }
 
 export interface AntiCheatLog {
-  id: number;
-  attempt_id: number;
-  event_type: AntiCheatEventType;
+  id: string; // UUID
+  attempt_id: string; // UUID -> ExamAttempt.id
+  event_type: string; // TAB_SWITCH, WINDOW_BLUR, COPY_PASTE_ATTEMPT, DEVTOOLS_SHORTCUT
   logged_at: string;
   metadata_info?: Record<string, any> | null;
 }
@@ -143,5 +171,5 @@ export interface TokenResponse {
   token_type: string;
   role: UserRole;
   full_name: string;
-  user_id: number;
+  user_id: string; // UUID
 }
