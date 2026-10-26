@@ -1,4 +1,8 @@
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+
+from app.models.entities import UserRole
 
 
 class LoginRequest(BaseModel):
@@ -14,6 +18,7 @@ class LoginRequest(BaseModel):
 class RegisterRequest(LoginRequest):
     model_config = ConfigDict(extra="forbid")
     full_name: str = Field(min_length=1, max_length=255)
+    role: Literal[UserRole.STUDENT, UserRole.INSTRUCTOR] = UserRole.STUDENT
     password: str = Field(min_length=8, max_length=72)
 
     @field_validator("full_name")

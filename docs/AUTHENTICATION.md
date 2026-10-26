@@ -8,13 +8,13 @@ API prefix: `/api/v1/auth`.
 
 | Endpoint | Request | Result |
 | --- | --- | --- |
-| POST /register | JSON: email, full_name, password | 201: public user; bcrypt hash persisted; role STUDENT |
+| POST /register | JSON: email, full_name, password, role (optional) | 201: public user; bcrypt hash persisted; selected STUDENT or INSTRUCTOR role |
 | POST /login | JSON: email, password | 200: public user + access/refresh HttpOnly cookies |
 | GET /me | Access cookie or access Bearer JWT | Current active user |
 | POST /refresh | Refresh cookie | New access/refresh cookies |
 | POST /logout | No body | Clears both cookies in this browser |
 
-Passwords require at least 8 characters and at most 72 UTF-8 bytes (bcrypt limit). Email is trimmed and lowercased; the database unique constraint also handles concurrent duplicate registration. Public registration rejects role fields so callers cannot assign themselves ADMIN or INSTRUCTOR.
+Passwords require at least 8 characters and at most 72 UTF-8 bytes (bcrypt limit). Email is trimmed and lowercased; the database unique constraint also handles concurrent duplicate registration. The registration form offers Học sinh (STUDENT) and Giáo viên (INSTRUCTOR). Public registration accepts only these roles, defaults to STUDENT when omitted, and rejects ADMIN or other values. The selected role is saved in the existing users.role column; no database migration is needed.
 
 Errors: 409 for duplicate email, 401 with `Email hoặc mật khẩu không đúng.` for incorrect credentials, 422 for invalid input. The frontend displays Vietnamese messages, validates password confirmation, disables the form while submitting and handles connection errors.
 
@@ -42,8 +42,8 @@ npm run build
 npm run dev
 ```
 
-Verified: 5 API tests pass and frontend production build passes. API tests create the actual User table in isolated in-memory SQLite and exercise real bcrypt and JWT signatures. They cover password persistence, duplicate email, role escalation rejection, credentials, validation, cookie flags, profile, refresh, logout, expired tokens and token purpose. PostgreSQL integration and browser interaction have not been verified.
+Verified: 11 API tests pass and frontend production build passes. API tests create the actual User table in isolated in-memory SQLite and exercise real bcrypt and JWT signatures. They cover password persistence, duplicate email, selected STUDENT/INSTRUCTOR role persistence through login, invalid role rejection, credentials, validation, cookie flags, profile, refresh, logout, expired tokens and token purpose. PostgreSQL integration and browser interaction have not been verified.
 
-Manual browser check: open `/register`, create a student account, follow the success message to `/login`, check invalid credentials, sign in, reload the workspace and sign out. Cookies should be HttpOnly in browser developer tools and localStorage should contain no authentication tokens.
+Manual browser check: open `/register`, create accounts with each account type (Học sinh and Giáo viên), follow the success message to `/login`, check invalid credentials, sign in, reload the workspace and sign out. Cookies should be HttpOnly in browser developer tools and localStorage should contain no authentication tokens.
 
 Per project workflow, mark the issue Done only after the remaining manual validation and PR approval/merge.

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import create_access_token, get_current_user, get_password_hash, verify_password
-from app.models.entities import User, UserRole
+from app.models.entities import User
 from app.modules.auth.schemas import LoginRequest, RegisterRequest
 from app.schemas.common import APIResponse, HealthCheckResponse, UserResponse
 
@@ -53,7 +53,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == email).first():
         raise HTTPException(409, "Email đã được sử dụng.")
     user = User(email=email, full_name=payload.full_name,
-                password_hash=get_password_hash(payload.password), role=UserRole.STUDENT)
+                password_hash=get_password_hash(payload.password), role=payload.role)
     db.add(user)
     try:
         db.commit()

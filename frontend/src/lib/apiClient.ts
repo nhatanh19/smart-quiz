@@ -27,6 +27,7 @@ export function authError(error: unknown): string {
     if (field === "email") return "Email không hợp lệ.";
     if (field === "password") return "Mật khẩu cần ít nhất 8 ký tự và tối đa 72 byte UTF-8.";
     if (field === "full_name") return "Vui lòng nhập họ tên hợp lệ.";
+    if (field === "role") return "Vui lòng chọn tài khoản học sinh hoặc giáo viên.";
     return "Thông tin không hợp lệ.";
   }))].join(" ");
   return error.response ? "Không thể xử lý yêu cầu. Vui lòng thử lại." : "Không thể kết nối máy chủ. Vui lòng kiểm tra kết nối.";

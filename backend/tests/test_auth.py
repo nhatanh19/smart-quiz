@@ -54,6 +54,23 @@ def test_registration_hash_and_duplicate(client, session):
     assert client.post("/api/v1/auth/register", json={**ACCOUNT, "role": "ADMIN"}).status_code == 422
 
 
+@pytest.mark.parametrize("role", ["STUDENT", "INSTRUCTOR"])
+def test_registration_selected_role_persists_through_login(client, session, role):
+    response = client.post("/api/v1/auth/register", json={**ACCOUNT, "role": role})
+    assert response.status_code == 201, response.text
+    assert response.json()["data"]["role"] == role
+    assert session.query(User).one().role.value == role
+    assert client.post("/api/v1/auth/login", json=ACCOUNT).status_code == 200
+    assert client.get("/api/v1/auth/me").json()["data"]["role"] == role
+
+
+@pytest.mark.parametrize("role", ["ADMIN", "TEACHER", "", None])
+def test_registration_rejects_invalid_roles(client, session, role):
+    response = client.post("/api/v1/auth/register", json={**ACCOUNT, "role": role})
+    assert response.status_code == 422
+    assert session.query(User).count() == 0
+
+
 def test_login_cookies_refresh_and_logout(client):
     client.post("/api/v1/auth/register", json=ACCOUNT)
     response = client.post("/api/v1/auth/login", json=ACCOUNT)
