@@ -22,13 +22,13 @@ class Settings(BaseSettings):
     @classmethod
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
         if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",") if i.strip()]
+            v = [i.strip() for i in v.split(",") if i.strip()]
         elif isinstance(v, str) and v.startswith("["):
             try:
-                return json.loads(v)
+                v = json.loads(v)
             except Exception:
-                return [v]
-        return v
+                v = [v]
+        return [origin.strip().rstrip("/") for origin in v]
 
     # Database configuration (PostgreSQL / Supabase / Neon)
     DATABASE_URL: str = "postgresql+psycopg2://postgres:admin@localhost:5432/smart_quiz"
@@ -36,7 +36,9 @@ class Settings(BaseSettings):
     # JWT Authentication & Cryptography
     SECRET_KEY: str = "smart_quiz_super_secret_jwt_key_for_development_replace_in_prod"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    COOKIE_SECURE: bool = False
 
     # AI LLM Provider Configuration (OpenAI SDK with Custom Host support)
     LLM_BASE_URL: str = "https://api.openai.com/v1"

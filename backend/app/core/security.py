@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Callable
 import uuid
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.entities import User, UserRole
-from app.schemas.common import TokenPayload
 
 # Password hashing context using Bcrypt
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -43,7 +42,7 @@ def create_access_token(
         expire = datetime.now(timezone.utc) + timedelta(
             minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
         )
-    to_encode.update({"exp": int(expire.timestamp())})
+    to_encode.update({"exp": int(expire.timestamp()), "type": "access"})
     encoded_jwt = jwt.encode(
         to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM
     )
@@ -54,26 +53,31 @@ def decode_access_token(token: str) -> dict:
     """Decode and validate a JWT access token."""
     try:
         payload = jwt.decode(
-            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM],
+            options={"require": ["exp", "sub", "type"]},
         )
+        if payload.get("type") != "access":
+            raise jwt.InvalidTokenError("Invalid token purpose")
         return payload
-    except jwt.PyJWTError as exc:
+    except jwt.PyJWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid or expired token: {str(exc)}",
+            detail="Phiên đăng nhập không hợp lệ hoặc đã hết hạn.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
 
 def get_current_user(
+    request: Request,
     token: Optional[str] = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> User:
     """Dependency extracting and verifying the authenticated user from JWT."""
+    token = token or request.cookies.get("access_token")
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication token is missing",
+            detail="Vui lòng đăng nhập.",
             headers={"WWW-Authenticate": "Bearer"},
         )
     payload = decode_access_token(token)
@@ -81,25 +85,25 @@ def get_current_user(
     if not user_id_str:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token subject invalid",
+            detail="Phiên đăng nhập không hợp lệ.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
     try:
         user_uuid = uuid.UUID(str(user_id_str))
         user = db.query(User).filter(User.id == user_uuid).first()
-    except (ValueError, TypeError):
-        user = db.query(User).filter(User.email == str(user_id_str)).first()
+    except (ValueError, TypeError, AttributeError):
+        raise HTTPException(status_code=401, detail="Phiên đăng nhập không hợp lệ.")
 
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Phiên đăng nhập không hợp lệ.",
         )
     if not user.is_active:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Inactive user account",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Tài khoản đã bị vô hiệu hóa.",
         )
     return user
 

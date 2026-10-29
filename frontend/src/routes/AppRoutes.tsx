@@ -7,7 +7,8 @@ import AuthLayout from "@/layouts/AuthLayout";
 import ExamFocusLayout from "@/layouts/ExamFocusLayout";
 
 // Placeholders for the 4 modules
-import LoginPlaceholder from "@/pages/auth/LoginPlaceholder";
+import AuthPage from "@/pages/auth/AuthPage";
+import ProtectedRoute from "@/routes/ProtectedRoute";
 import ParserPlaceholder from "@/pages/parser/ParserPlaceholder";
 import AiGenPlaceholder from "@/pages/ai-generator/AiGenPlaceholder";
 import ExamPlaceholder from "@/pages/exam/ExamPlaceholder";
@@ -22,21 +23,26 @@ export const AppRoutes: React.FC = () => {
     <Routes>
       {/* 1. Authentication Routes (Wrapped in AuthLayout) */}
       <Route element={<AuthLayout />}>
-        <Route path="/auth/login" element={<LoginPlaceholder />} />
+        <Route path="/login" element={<AuthPage key="login" />} />
+        <Route path="/register" element={<AuthPage key="register" register />} />
+        <Route path="/auth/login" element={<Navigate to="/login" replace />} />
+        <Route path="/auth/register" element={<Navigate to="/register" replace />} />
       </Route>
 
       {/* 2. Main Workspace Routes (Wrapped in MainLayout) */}
-      <Route element={<MainLayout />}>
-        <Route path="/" element={<Navigate to="/parser" replace />} />
-        <Route path="/parser" element={<ParserPlaceholder />} />
-        <Route path="/ai-generator" element={<AiGenPlaceholder />} />
-        <Route path="/analytics" element={<AnalyticsPlaceholder />} />
-      </Route>
+      <Route element={<ProtectedRoute />}>
+        <Route element={<MainLayout />}>
+          <Route path="/" element={<Navigate to="/parser" replace />} />
+          <Route path="/parser" element={<ParserPlaceholder />} />
+          <Route path="/ai-generator" element={<AiGenPlaceholder />} />
+          <Route path="/analytics" element={<AnalyticsPlaceholder />} />
+        </Route>
 
-      {/* 3. Focused Exam Room (Wrapped in Isolated ExamFocusLayout for Module 3) */}
-      <Route element={<ExamFocusLayout />}>
-        <Route path="/exam" element={<ExamPlaceholder />} />
-        <Route path="/exam/:attemptId" element={<ExamPlaceholder />} />
+        {/* 3. Focused Exam Room (Wrapped in Isolated ExamFocusLayout for Module 3) */}
+        <Route element={<ExamFocusLayout />}>
+          <Route path="/exam" element={<ExamPlaceholder />} />
+          <Route path="/exam/:attemptId" element={<ExamPlaceholder />} />
+        </Route>
       </Route>
 
       {/* 4. Fallback 404 Route */}
