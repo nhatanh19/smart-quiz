@@ -1,34 +1,33 @@
-﻿import os
 import sys
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
-os.environ["DATABASE_URL"] = "sqlite://"
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import jwt
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
 from app.main import app
-from app.core.config import settings
+from app.core.config import Settings, settings
 from app.core.database import get_db
 from app.core.security import verify_password, create_access_token
 from app.models.entities import User
 
 
 @pytest.fixture
-def session():
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-    # Only auth's real users table is needed; other tables use PostgreSQL JSONB.
-    User.__table__.create(engine)
-    with Session(engine) as db:
-        app.dependency_overrides[get_db] = lambda: db
-        yield db
-    app.dependency_overrides.clear()
-    engine.dispose()
+def session(auth_engine):
+    with auth_engine.connect() as connection:
+        transaction = connection.begin()
+        if connection.dialect.name == "sqlite":
+            connection.exec_driver_sql("BEGIN")
+        try:
+            with Session(bind=connection, join_transaction_mode="create_savepoint") as db:
+                app.dependency_overrides[get_db] = lambda: db
+                yield db
+        finally:
+            app.dependency_overrides.clear()
+            transaction.rollback()
 
 
 @pytest.fixture
@@ -38,6 +37,24 @@ def client(session):
 
 
 ACCOUNT = {"email": "Student@example.com", "full_name": "Nguyễn An", "password": "Password123!"}
+
+
+@pytest.mark.parametrize("origins", [
+    ["http://localhost:5173/"],
+    "http://localhost:5173/",
+    '["http://localhost:5173/"]',
+])
+def test_origin_configuration_normalization(client, monkeypatch, origins):
+    config = Settings(_env_file=None, BACKEND_CORS_ORIGINS=origins)
+    assert config.BACKEND_CORS_ORIGINS == ["http://localhost:5173"]
+    monkeypatch.setattr(settings, "BACKEND_CORS_ORIGINS", config.BACKEND_CORS_ORIGINS)
+    headers = {"Origin": "http://localhost:5173"}
+    assert client.post("/api/v1/auth/register", json=ACCOUNT, headers=headers).status_code == 201
+    assert client.post("/api/v1/auth/login", json=ACCOUNT, headers=headers).status_code == 200
+    assert client.post("/api/v1/auth/refresh", headers=headers).status_code == 200
+    assert client.post("/api/v1/auth/logout", headers=headers).status_code == 200
+    assert client.post("/api/v1/auth/login", json=ACCOUNT,
+                       headers={"Origin": "https://evil.example"}).status_code == 403
 
 
 def test_registration_hash_and_duplicate(client, session):

@@ -22,13 +22,13 @@ class Settings(BaseSettings):
     @classmethod
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
         if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",") if i.strip()]
+            v = [i.strip() for i in v.split(",") if i.strip()]
         elif isinstance(v, str) and v.startswith("["):
             try:
-                return json.loads(v)
+                v = json.loads(v)
             except Exception:
-                return [v]
-        return v
+                v = [v]
+        return [origin.strip().rstrip("/") for origin in v]
 
     # Database configuration (PostgreSQL / Supabase / Neon)
     DATABASE_URL: str = "postgresql+psycopg2://postgres:admin@localhost:5432/smart_quiz"

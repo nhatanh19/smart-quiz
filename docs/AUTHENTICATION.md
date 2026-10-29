@@ -20,11 +20,22 @@ Errors: 409 for duplicate email, 401 with `Email hoặc mật khẩu không đú
 
 ## Session storage
 
-Access tokens expire after 15 minutes; refresh tokens after 7 days by default. JWTs have distinct access/refresh purposes and user UUID subjects. JavaScript receives public user information, never raw tokens. Cookies use HttpOnly and SameSite=Lax. Axios includes credentials and retries protected requests once after refreshing an expired access token. Protected routes query `/me` rather than trusting browser storage.
+Access tokens expire after 15 minutes; refresh tokens after 7 days by default. JWTs have distinct access/refresh purposes and user UUID subjects. JavaScript receives public user information, never raw tokens. Cookies use HttpOnly and SameSite=Lax. Axios includes credentials and retries protected requests once after refreshing an expired access token. A shared AuthProvider loads `/me` when a protected route first mounts, deduplicates pending checks, and shares the user with the layout. Login updates that state directly; logout clears it without another `/me` or refresh request. Public login/register pages do not initiate session checks. A fresh visit to a protected page without valid cookies can still produce `/me` and `/refresh` 401 responses during session recovery.
 
-Use the same site for frontend and API (localhost with separate ports works). Set a strong SECRET_KEY, COOKIE_SECURE=true and HTTPS in production. BACKEND_CORS_ORIGINS must contain the exact frontend origin. Mutating auth endpoints reject unapproved origins and cross-site fetches. Cross-site hosting is not supported by this cookie configuration.
+Use the same site for frontend and API (localhost with separate ports works). Set a strong SECRET_KEY, COOKIE_SECURE=true and HTTPS in production. BACKEND_CORS_ORIGINS must contain the frontend origin; surrounding whitespace and trailing slashes in configuration are removed for both CORS and auth checks. Mutating auth endpoints reject unapproved origins and cross-site fetches. Cross-site hosting is not supported by this cookie configuration.
 
 Refresh tokens are stateless. A renewed token does not revoke the previous one; logout clears this browser's cookies but does not revoke copied tokens. Persisted refresh sessions and one-time rotation are a future extension.
+
+## Scope and follow-up work
+
+This change implements authentication, session recovery, and STUDENT/INSTRUCTOR role selection and persistence. Existing role-checking helpers are available, but business routes do not enforce roles yet. Role enforcement and ownership checks belong to Issue #4. `/me` provides public user data; there is no dedicated Profile page.
+
+Follow-up backlog:
+- Add login rate limits by IP and normalized email with temporary throttling.
+- Persist refresh sessions, rotate tokens once, detect reuse, and revoke sessions on logout.
+- Run the optional PostgreSQL migration, authentication, native enum, and JSONB tests in CI. These tests now run locally with AUTH_TEST_DATABASE_URL; the repository still needs a CI workflow and PostgreSQL service.
+
+Suggested PR description: "Implement registration and login with bcrypt password hashing, HttpOnly access/refresh cookies, session recovery, logout, and shared frontend auth state. Support STUDENT/INSTRUCTOR role selection and persistence; business-route authorization remains in Issue #4."
 
 ## Validation
 
@@ -42,7 +53,20 @@ npm run build
 npm run dev
 ```
 
-Verified: 11 API tests pass and frontend production build passes. API tests create the actual User table in isolated in-memory SQLite and exercise real bcrypt and JWT signatures. They cover password persistence, duplicate email, selected STUDENT/INSTRUCTOR role persistence through login, invalid role rejection, credentials, validation, cookie flags, profile, refresh, logout, expired tokens and token purpose. PostgreSQL integration and browser interaction have not been verified.
+API tests exercise real bcrypt and JWT signatures against isolated in-memory SQLite by default, or a migrated temporary PostgreSQL database when configured below. They cover password persistence, duplicate email, selected STUDENT/INSTRUCTOR role persistence through login, invalid role rejection, credentials, validation, cookie flags, current-user data, refresh, logout, expired tokens, token purpose, and origin configuration normalization. Browser interaction requires separate validation.
+
+### Real PostgreSQL validation
+
+From `backend`, set `AUTH_TEST_DATABASE_URL` to a PostgreSQL connection URL using a login with `CREATEDB` permission, then run:
+
+```powershell
+# Set AUTH_TEST_DATABASE_URL in the environment before this command.
+.venv/Scripts/python.exe -m pytest tests -q -p no:cacheprovider
+```
+
+The suite creates a unique `smart_quiz_auth_test_<uuid>` database on that server, applies the actual Alembic migration, and drops only that temporary database in teardown. It never migrates or changes data in the database named by the connection URL. Each test uses a transaction that rolls back even when the application commits. Without AUTH_TEST_DATABASE_URL, auth tests use SQLite and PostgreSQL smoke tests skip.
+
+Verified on 2026-10-29: **17 passed on PostgreSQL 17.11**, including all 14 auth cases and 3 PostgreSQL smoke tests. Smoke tests check migration/ORM parity, native enum rejection, UUID values, JSONB round trips, and database constraints. The test run used SQLAlchemy 2.0.55 built without its optional C extensions in a separate local test runtime because Windows Application Control blocked the installed SQLAlchemy DLL. Browser validation and CI remain separate follow-up work.
 
 Manual browser check: open `/register`, create accounts with each account type (Học sinh and Giáo viên), follow the success message to `/login`, check invalid credentials, sign in, reload the workspace and sign out. Cookies should be HttpOnly in browser developer tools and localStorage should contain no authentication tokens.
 

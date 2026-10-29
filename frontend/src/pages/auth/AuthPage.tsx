@@ -1,8 +1,10 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { apiClient, authError } from "@/lib/apiClient";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function AuthPage({ register = false }: { register?: boolean }) {
+  const { login } = useAuth();
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const navigate = useNavigate();
@@ -21,10 +23,12 @@ export default function AuthPage({ register = false }: { register?: boolean }) {
     }
     setPending(true);
     try {
-      await apiClient.post(`/auth/${register ? "register" : "login"}`, {
+      const credentials = {
         email: String(form.get("email")).trim(), password,
         ...(register ? { full_name: String(form.get("full_name")).trim(), role: String(form.get("role")) } : {}),
-      });
+      };
+      if (register) await apiClient.post("/auth/register", credentials);
+      else await login(credentials);
       if (register) navigate("/login", { replace: true, state: { registered: true } });
       else {
         const from = location.state?.from;
