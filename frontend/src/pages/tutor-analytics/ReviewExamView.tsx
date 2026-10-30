@@ -87,6 +87,7 @@ export const ReviewExamView: React.FC = () => {
   const [questions, setQuestions] = useState<ReviewQuestionItem[]>(SAMPLE_REVIEW_QUESTIONS);
   const [filterMode, setFilterMode] = useState<"ALL" | "INCORRECT" | "CORRECT">("ALL");
   const [loadingQuestions, setLoadingQuestions] = useState<Record<string, boolean>>({});
+  const [errorQuestions, setErrorQuestions] = useState<Record<string, string>>({});
   const [elapsedTimers, setElapsedTimers] = useState<Record<string, number>>({});
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({
     "q-1": true,
@@ -106,6 +107,7 @@ export const ReviewExamView: React.FC = () => {
   const handleRequestAIExplanation = async (question: ReviewQuestionItem) => {
     const qId = question.id;
     setLoadingQuestions((prev) => ({ ...prev, [qId]: true }));
+    setErrorQuestions((prev) => ({ ...prev, [qId]: "" }));
     setExpandedCards((prev) => ({ ...prev, [qId]: true }));
 
     // Start a timer ticker to show live sub-3-second progress
@@ -139,8 +141,13 @@ export const ReviewExamView: React.FC = () => {
             : item
         )
       );
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching AI explanation:", error);
+      const message =
+        error?.response?.data?.detail ||
+        error?.message ||
+        "Không gọi được AI Tutor. Kiểm tra backend đang chạy và cấu hình LLM_API_KEY trong backend/.env.";
+      setErrorQuestions((prev) => ({ ...prev, [qId]: String(message) }));
     } finally {
       clearInterval(interval);
       setLoadingQuestions((prev) => ({ ...prev, [qId]: false }));
@@ -413,6 +420,17 @@ export const ReviewExamView: React.FC = () => {
                   feedback={q.ai_feedback!}
                   responseTimeMs={q.response_time_ms}
                 />
+              )}
+
+              {/* AI Tutor Error State (no mock data — surface the real failure) */}
+              {errorQuestions[q.id] && !isLoading && (
+                <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50/70 p-4 text-sm text-rose-800 flex items-start gap-2.5">
+                  <XCircle className="h-5 w-5 shrink-0 mt-0.5 text-rose-600" />
+                  <div>
+                    <p className="font-semibold">Không nhận được lời giải từ AI Tutor</p>
+                    <p className="text-rose-700/90 mt-0.5">{errorQuestions[q.id]}</p>
+                  </div>
+                </div>
               )}
             </div>
           );

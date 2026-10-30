@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 from pydantic import BaseModel, Field
 from app.models.entities import QuestionType
@@ -26,7 +26,7 @@ class AITutorFeedbackSchema(BaseModel):
     )
     model: str = Field(default="gpt-4o-mini", description="Mô hình AI thực hiện phân tích")
     generated_at: str = Field(
-        default_factory=lambda: datetime.utcnow().isoformat() + "Z",
+        default_factory=lambda: datetime.now(timezone.utc).isoformat(),
         description="Thời điểm sinh phản hồi (ISO 8601)",
     )
 
