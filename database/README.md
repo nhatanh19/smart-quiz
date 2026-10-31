@@ -8,7 +8,7 @@ Thư mục này chứa toàn bộ các script SQL thuần (Pure SQL DDL & DML) �
 
 | Tên File | Chức năng | Chi tiết nội dung |
 | :--- | :--- | :--- |
-| **`schema.sql`** | **Khởi tạo toàn bộ CSDL** | Tạo extension `pgcrypto`, 5 kiểu Enum PostgreSQL native, 8 bảng thực thể, toàn bộ khóa chính UUID, khóa ngoại, ràng buộc `CHECK`, `DEFERRABLE`, chỉ mục tối ưu, và ghi chú `COMMENT ON TABLE/COLUMN`. |
+| **`schema.sql`** | **Khởi tạo toàn bộ CSDL** | Tạo extension `pgcrypto`, 6 kiểu Enum PostgreSQL native, 9 bảng thực thể, toàn bộ khóa chính UUID, khóa ngoại, ràng buộc `CHECK`, `DEFERRABLE`, chỉ mục tối ưu, và ghi chú `COMMENT ON TABLE/COLUMN`. |
 | **`seed.sql`** | **Nạp dữ liệu mẫu ban đầu** | Nạp 3 tài khoản mẫu (Admin, Instructor, Student với password `SmartQuiz@123`), 1 chuyên đề Quản trị dự án, 3 câu hỏi mẫu (Bloom: Nhận biết, Thông hiểu, Vận dụng) và 1 đề thi mẫu `DEMO0001` gồm 3 câu hỏi. |
 
 ---
@@ -18,7 +18,7 @@ Thư mục này chứa toàn bộ các script SQL thuần (Pure SQL DDL & DML) �
 Nếu bạn có PostgreSQL client trên máy:
 
 ```bash
-# 1. Chạy file khởi tạo cấu trúc 8 bảng và 5 enum
+# 1. Chạy file khởi tạo cấu trúc 9 bảng và 6 enum
 psql -h <HOST> -p <PORT> -U <USER> -d <DATABASE_NAME> -f database/schema.sql
 
 # 2. Nạp dữ liệu mẫu (demo data)

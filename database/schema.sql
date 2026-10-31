@@ -7,6 +7,7 @@
 
 -- 0. KÍCH HOẠT EXTENSION HỖ TRỢ UUID (NẾU CẦN)
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 
 -- =============================================================================
 -- 1. DANH MỤC CÁC KIỂU DỮ LIỆU ENUM (POSTGRESQL NATIVE ENUMS)
@@ -23,6 +24,9 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'cognitive_level') THEN
         CREATE TYPE cognitive_level AS ENUM ('REMEMBER', 'UNDERSTAND', 'APPLY');
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'question_level') THEN
+        CREATE TYPE question_level AS ENUM ('EASY', 'MEDIUM', 'HARD');
+    END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'attempt_status') THEN
         CREATE TYPE attempt_status AS ENUM ('IN_PROGRESS', 'SUBMITTED', 'LOCKED_VIOLATION', 'EXPIRED');
     END IF;
@@ -32,7 +36,7 @@ BEGIN
 END $$;
 
 -- =============================================================================
--- 2. TẠO CÁC BẢNG THỰC THỂ (8 TABLES)
+-- 2. TẠO CÁC BẢNG THỰC THỂ (9 TABLES)
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
@@ -59,19 +63,37 @@ COMMENT ON COLUMN users.role IS 'Phân quyền người dùng: ADMIN, INSTRUCTOR
 -- -----------------------------------------------------------------------------
 -- 2.2 Bảng: categories (Chuyên đề / Học phần quản lý câu hỏi)
 -- -----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS categories (
+CREATE TABLE IF NOT EXISTS subjects (
     id          uuid         NOT NULL DEFAULT gen_random_uuid(),
     name        varchar(255) NOT NULL,
     description text,
     created_by  uuid         NOT NULL,
     created_at  timestamptz  NOT NULL DEFAULT now(),
     updated_at  timestamptz  NOT NULL DEFAULT now(),
-    CONSTRAINT pk_categories PRIMARY KEY (id),
-    CONSTRAINT fk_categories_created_by_users FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE RESTRICT,
-    CONSTRAINT uq_categories_created_by_name UNIQUE (created_by, name)
+    CONSTRAINT pk_subjects PRIMARY KEY (id),
+    CONSTRAINT fk_subjects_created_by_users FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE RESTRICT,
+    CONSTRAINT uq_subjects_created_by_name UNIQUE (created_by, name)
 );
 
-COMMENT ON TABLE categories IS 'Chuyên đề hoặc môn học chứa ngân hàng câu hỏi';
+CREATE INDEX IF NOT EXISTS ix_subjects_created_by ON subjects (created_by);
+COMMENT ON TABLE subjects IS 'Subjects containing question-bank topics';
+
+CREATE TABLE IF NOT EXISTS categories (
+    id          uuid         NOT NULL DEFAULT gen_random_uuid(),
+    name        varchar(255) NOT NULL,
+    description text,
+    subject_id  uuid,
+    created_by  uuid         NOT NULL,
+    created_at  timestamptz  NOT NULL DEFAULT now(),
+    updated_at  timestamptz  NOT NULL DEFAULT now(),
+    CONSTRAINT pk_categories PRIMARY KEY (id),
+    CONSTRAINT fk_categories_subject_id_subjects FOREIGN KEY (subject_id) REFERENCES subjects (id) ON DELETE SET NULL,
+    CONSTRAINT fk_categories_created_by_users FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE RESTRICT,
+    CONSTRAINT uq_categories_created_by_subject_name UNIQUE (created_by, subject_id, name)
+);
+
+CREATE INDEX IF NOT EXISTS ix_categories_subject_id ON categories (subject_id);
+COMMENT ON TABLE categories IS 'Topics grouped by subject; subject_id is nullable for existing data';
 COMMENT ON COLUMN categories.created_by IS 'Giảng viên/quản trị viên sở hữu chuyên đề (RESTRICT khi xóa user)';
 
 -- -----------------------------------------------------------------------------
@@ -84,7 +106,9 @@ CREATE TABLE IF NOT EXISTS questions (
     content         text            NOT NULL,
     question_type   question_type   NOT NULL,
     cognitive_level cognitive_level NOT NULL,
+    level           question_level  NOT NULL DEFAULT 'MEDIUM',
     options         jsonb           NOT NULL,
+    tags            jsonb           NOT NULL DEFAULT '[]'::jsonb,
     explanation     text,
     source_type     question_source NOT NULL DEFAULT 'MANUAL',
     created_at      timestamptz     NOT NULL DEFAULT now(),
@@ -92,6 +116,7 @@ CREATE TABLE IF NOT EXISTS questions (
     CONSTRAINT pk_questions PRIMARY KEY (id),
     CONSTRAINT fk_questions_category_id_categories FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT,
     CONSTRAINT fk_questions_creator_id_users FOREIGN KEY (creator_id) REFERENCES users (id) ON DELETE RESTRICT,
+    CONSTRAINT ck_questions_tags_is_array CHECK (jsonb_typeof(tags) = 'array'),
     CONSTRAINT ck_questions_options_is_array CHECK (
         CASE WHEN jsonb_typeof(options) = 'array'
              THEN jsonb_array_length(options) BETWEEN 2 AND 10
@@ -100,10 +125,15 @@ CREATE TABLE IF NOT EXISTS questions (
 
 CREATE INDEX IF NOT EXISTS ix_questions_creator_category ON questions (creator_id, category_id);
 CREATE INDEX IF NOT EXISTS ix_questions_matrix ON questions (category_id, cognitive_level, question_type);
+CREATE INDEX IF NOT EXISTS ix_questions_category_level ON questions (category_id, level);
+CREATE INDEX IF NOT EXISTS ix_questions_content_trgm ON questions USING gin (content gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS ix_questions_tags ON questions USING gin (tags);
 
 COMMENT ON TABLE questions IS 'Ngân hàng câu hỏi đơn vị, hỗ trợ định dạng Bloom và JSONB options';
 COMMENT ON COLUMN questions.options IS 'Mảng JSONB chứa từ 2 đến 10 phương án: [{"id": "A", "text": "...", "is_correct": true}]';
 COMMENT ON COLUMN questions.cognitive_level IS 'Mức độ nhận thức Bloom: REMEMBER (Nhận biết), UNDERSTAND (Thông hiểu), APPLY (Vận dụng)';
+COMMENT ON COLUMN questions.level IS 'Độ khó câu hỏi: EASY, MEDIUM, HARD; độc lập với điểm câu hỏi trong đề thi';
+COMMENT ON COLUMN questions.tags IS 'Danh sách tag tự do dùng để phân loại và lọc câu hỏi';
 
 -- -----------------------------------------------------------------------------
 -- 2.4 Bảng: exams (Kỳ thi / Đề thi trắc nghiệm)

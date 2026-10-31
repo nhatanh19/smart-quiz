@@ -32,7 +32,7 @@ from scripts.seed import seed_data
 
 
 def test_1_tables_and_enums(alembic_cfg):
-    print("\n--- TEST 1: Check 8 domain tables + alembic_version and 5 enums ---")
+    print("\n--- TEST 1: Check 9 domain tables + alembic_version and 6 enums ---")
     with engine.connect() as conn:
         tables = conn.execute(
             text(
@@ -50,6 +50,7 @@ def test_1_tables_and_enums(alembic_cfg):
             "exam_questions",
             "exams",
             "questions",
+            "subjects",
             "users",
         }
         assert set(tables) == expected_tables, f"Tables mismatch: {set(tables)} vs {expected_tables}"
@@ -65,12 +66,13 @@ def test_1_tables_and_enums(alembic_cfg):
         expected_enums = {
             "attempt_status",
             "cognitive_level",
+            "question_level",
             "question_source",
             "question_type",
             "user_role",
         }
         assert set(enums) == expected_enums, f"Enums mismatch: {set(enums)} vs {expected_enums}"
-    print("  ✅ TEST 1 PASSED: 8 domain tables and 5 enums exist.")
+    print("  ✅ TEST 1 PASSED: 9 domain tables and 6 enums exist.")
 
 
 def test_2_downgrade_and_upgrade(alembic_cfg):
@@ -93,7 +95,7 @@ def test_2_downgrade_and_upgrade(alembic_cfg):
             )
         ).scalars().all()
         assert len(enums) == 0, f"Enums left after downgrade: {enums}"
-        print("  ✅ Downgrade base cleanly removed all tables and all 5 enums.")
+        print("  ✅ Downgrade base cleanly removed all tables and all 6 enums.")
 
     command.upgrade(alembic_cfg, "head")
     print("  ✅ Re-upgrade head succeeded.")

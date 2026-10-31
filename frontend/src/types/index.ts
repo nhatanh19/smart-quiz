@@ -8,6 +8,8 @@ export type QuestionType = "SINGLE_CHOICE" | "MULTIPLE_CHOICE" | "TRUE_FALSE";
 
 export type CognitiveLevel = "REMEMBER" | "UNDERSTAND" | "APPLY";
 
+export type QuestionLevel = "EASY" | "MEDIUM" | "HARD";
+
 export type AttemptStatus =
   | "IN_PROGRESS"
   | "SUBMITTED"
@@ -41,7 +43,17 @@ export interface Category {
   id: string; // UUID
   name: string;
   description?: string | null;
+  subject_id?: string | null;
   created_by: string; // UUID -> User.id
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Subject {
+  id: string;
+  name: string;
+  description?: string | null;
+  created_by: string;
   created_at: string;
   updated_at: string;
 }
@@ -59,7 +71,9 @@ export interface Question {
   content: string;
   question_type: QuestionType;
   cognitive_level: CognitiveLevel;
+  level: QuestionLevel;
   options: QuestionOption[];
+  tags: string[];
   explanation?: string | null;
   source_type: QuestionSource;
   created_at: string;

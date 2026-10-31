@@ -51,6 +51,13 @@ class CognitiveLevel(str, enum.Enum):
     APPLY = "APPLY"
 
 
+class QuestionLevel(str, enum.Enum):
+    """Question difficulty levels enum in PostgreSQL: question_level."""
+    EASY = "EASY"
+    MEDIUM = "MEDIUM"
+    HARD = "HARD"
+
+
 class AttemptStatus(str, enum.Enum):
     """Exam attempt lifecycle enum in PostgreSQL: attempt_status."""
     IN_PROGRESS = "IN_PROGRESS"
@@ -122,6 +129,9 @@ class User(Base):
     created_categories: Mapped[List["Category"]] = relationship(
         "Category", back_populates="creator", passive_deletes="all"
     )
+    created_subjects: Mapped[List["Subject"]] = relationship(
+        "Subject", back_populates="creator", passive_deletes="all"
+    )
     created_questions: Mapped[List["Question"]] = relationship(
         "Question", back_populates="creator", passive_deletes="all"
     )
@@ -133,10 +143,10 @@ class User(Base):
     )
 
 
-# 2) categories (chuyên đề / học phần)
-class Category(Base):
-    """Category/Topic entity."""
-    __tablename__ = "categories"
+# 2) subjects (môn học)
+class Subject(Base):
+    """Subject containing question-bank topics."""
+    __tablename__ = "subjects"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -165,10 +175,64 @@ class Category(Base):
 
     __table_args__ = (
         UniqueConstraint("created_by", "name", name="created_by_name"),
+        Index("ix_subjects_created_by", "created_by"),
+    )
+
+    creator: Mapped["User"] = relationship("User", back_populates="created_subjects")
+    categories: Mapped[List["Category"]] = relationship(
+        "Category", back_populates="subject", passive_deletes="all"
+    )
+
+
+# 3) categories (chuyên đề)
+class Category(Base):
+    """Category/Topic entity."""
+    __tablename__ = "categories"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=text("gen_random_uuid()"),
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    subject_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("subjects.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "created_by",
+            "subject_id",
+            "name",
+            name="created_by_subject_name",
+        ),
     )
 
     # Relationships
     creator: Mapped["User"] = relationship("User", back_populates="created_categories")
+    subject: Mapped[Optional["Subject"]] = relationship(
+        "Subject", back_populates="categories"
+    )
     questions: Mapped[List["Question"]] = relationship(
         "Question", back_populates="category", passive_deletes="all"
     )
@@ -204,7 +268,19 @@ class Question(Base):
         SAEnum(CognitiveLevel, name="cognitive_level", native_enum=True),
         nullable=False,
     )
+    level: Mapped[QuestionLevel] = mapped_column(
+        SAEnum(QuestionLevel, name="question_level", native_enum=True),
+        nullable=False,
+        server_default="MEDIUM",
+        default=QuestionLevel.MEDIUM,
+    )
     options: Mapped[Any] = mapped_column(JSONB, nullable=False)
+    tags: Mapped[List[str]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'[]'::jsonb"),
+        default=list,
+    )
     explanation: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     source_type: Mapped[QuestionSource] = mapped_column(
         SAEnum(QuestionSource, name="question_source", native_enum=True),
@@ -231,8 +307,20 @@ class Question(Base):
             "ELSE false END",
             name="options_is_array",
         ),
+        CheckConstraint(
+            "jsonb_typeof(tags) = 'array'",
+            name="tags_is_array",
+        ),
         Index("ix_questions_creator_category", "creator_id", "category_id"),
         Index("ix_questions_matrix", "category_id", "cognitive_level", "question_type"),
+        Index("ix_questions_category_level", "category_id", "level"),
+        Index(
+            "ix_questions_content_trgm",
+            "content",
+            postgresql_using="gin",
+            postgresql_ops={"content": "gin_trgm_ops"},
+        ),
+        Index("ix_questions_tags", "tags", postgresql_using="gin"),
     )
 
     # Relationships
