@@ -1,15 +1,25 @@
+from dataclasses import asdict
+from typing import Any, Dict, Optional
 import uuid
-from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.models.entities import AttemptAnswer, ExamAttempt, Question
+from app.core.security import require_roles
+from app.models.entities import AttemptAnswer, ExamAttempt, Question, User, UserRole
+from app.modules.tutor_analytics.exceptions import (
+    InvalidAttemptStateError,
+    NotFoundError,
+    SnapshotMismatchError,
+)
 from app.modules.tutor_analytics.schemas import (
     AITutorExplanationData,
     AITutorExplanationRequest,
+    GradingResultSchema,
 )
 from app.modules.tutor_analytics.service import ai_tutor_service
+from app.modules.tutor_analytics.services.grading_service import grade_attempt
 from app.schemas.common import APIResponse, HealthCheckResponse
 
 router = APIRouter(prefix="/tutor-analytics", tags=["Module 4: AI Tutor & Analytics (Dev 4)"])
@@ -19,6 +29,54 @@ router = APIRouter(prefix="/tutor-analytics", tags=["Module 4: AI Tutor & Analyt
 def tutor_analytics_health_check():
     """Health check endpoint for AI Tutor & Analytics module."""
     return HealthCheckResponse(service="Auto-Grading, AI Tutor & Analytics Service")
+
+
+# ==============================================================================
+# ISSUE #14: INSTANT AUTO-GRADING ENGINE ENDPOINT
+# ==============================================================================
+
+
+@router.post(
+    "/grade/{attempt_id}",
+    response_model=APIResponse[GradingResultSchema],
+    dependencies=[Depends(require_roles([UserRole.INSTRUCTOR, UserRole.ADMIN]))],
+)
+def grade_attempt_endpoint(
+    attempt_id: uuid.UUID,
+    force: bool = Query(False, description="Force re-grading of an already submitted attempt"),
+    db: Session = Depends(get_db),
+):
+    """B1: Instructor/Admin re-grading or manual grading endpoint.
+
+    Adheres to DEV3_DEV4_WORKING_AGREEMENT section 5.3 and 7.1.
+    """
+    try:
+        result = grade_attempt(db, attempt_id, force=force)
+        db.commit()
+    except NotFoundError as err:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(err),
+        )
+    except (SnapshotMismatchError, InvalidAttemptStateError) as err:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(err),
+        )
+    except Exception as err:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi hệ thống khi chấm điểm: {str(err)}",
+        )
+
+    return APIResponse(
+        success=True,
+        message="Chấm điểm bài thi thành công.",
+        data=asdict(result),
+    )
 
 
 # ==============================================================================
@@ -142,23 +200,17 @@ def get_attempt_review(attempt_id: uuid.UUID, db: Session = Depends(get_db)):
 
 
 # ==============================================================================
-# PLACEHOLDER ENDPOINTS FOR REMAINING TASKS (ISSUES 14, 27, 28)
+# PLACEHOLDER ENDPOINTS FOR REMAINING TASKS (ISSUES 27, 28)
 # ==============================================================================
 
 
-@router.post("/grade/{attempt_id}", response_model=APIResponse[dict])
-def grade_attempt_placeholder(attempt_id: int, db: Session = Depends(get_db)):
-    """Auto-grading endpoint placeholder."""
-    return APIResponse(
-        success=True,
-        message="// TODO: Dev 4 - Implement Auto-Grading Engine logic",
-        data={"attempt_id": attempt_id, "score": 10.0},
-    )
-
-
 @router.get("/analytics/student/{student_id}", response_model=APIResponse[dict])
-def get_student_analytics_placeholder(student_id: int, db: Session = Depends(get_db)):
-    """Student performance analytics dashboard placeholder."""
+def get_student_analytics_placeholder(student_id: str, db: Session = Depends(get_db)):
+    """Student performance analytics dashboard placeholder.
+
+    // TODO: Dev 4 - Calculate progress trends, accuracy percentage by topic/category,
+    // and identify knowledge gaps.
+    """
     return APIResponse(
         success=True,
         message="// TODO: Dev 4 - Implement Student Learning Analytics logic",
@@ -167,8 +219,12 @@ def get_student_analytics_placeholder(student_id: int, db: Session = Depends(get
 
 
 @router.get("/analytics/exam/{exam_id}", response_model=APIResponse[dict])
-def get_exam_analytics_placeholder(exam_id: int, db: Session = Depends(get_db)):
-    """Instructor exam distribution analytics placeholder."""
+def get_exam_analytics_placeholder(exam_id: str, db: Session = Depends(get_db)):
+    """Instructor exam distribution analytics placeholder.
+
+    // TODO: Dev 4 - Compute score distribution histogram, question difficulty
+    // breakdown, and high-frequency incorrect answers.
+    """
     return APIResponse(
         success=True,
         message="// TODO: Dev 4 - Implement Instructor Exam Analytics logic",

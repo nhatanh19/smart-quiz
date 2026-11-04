@@ -1,9 +1,45 @@
-import uuid
+"""Pydantic schemas for Auto-Grading Engine and AI Tutor & Analytics module."""
+
 from datetime import datetime, timezone
 from typing import List, Optional
-from pydantic import BaseModel, Field
+import uuid
+from pydantic import BaseModel, ConfigDict, Field
 from app.models.entities import QuestionType
 from app.schemas.common import QuestionOptionSchema
+
+
+# ==============================================================================
+# ISSUE #14: AUTO-GRADING ENGINE SCHEMAS
+# ==============================================================================
+
+
+class AnswerGradingSchema(BaseModel):
+    """Grading detail for a single question."""
+
+    question_id: uuid.UUID
+    is_correct: bool
+    points_awarded: float
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class GradingResultSchema(BaseModel):
+    """Overall grading result for an exam attempt."""
+
+    attempt_id: uuid.UUID
+    score: float
+    correct_count: int
+    total_questions: int
+    answers: List[AnswerGradingSchema]
+    time_spent_seconds: int
+    already_graded: bool = False
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ==============================================================================
+# ISSUE #16: AI TUTOR CONTEXTUAL EXPLANATION SCHEMAS
+# ==============================================================================
 
 
 class AITutorFeedbackSchema(BaseModel):
