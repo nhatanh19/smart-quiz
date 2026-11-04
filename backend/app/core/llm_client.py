@@ -56,9 +56,6 @@ class LLMClientAdapter:
         user_prompt: str,
         response_schema: Type[T],
         temperature: float = 0.2,
-        model: Optional[str] = None,
-        prefer_json_object: bool = False,
-        max_tokens: Optional[int] = None,
     ) -> T:
         """Call LLM provider and validate response strictly against a Pydantic BaseModel.
 
@@ -67,11 +64,6 @@ class LLMClientAdapter:
             user_prompt: Specific input content or request.
             response_schema: Subclass of Pydantic BaseModel defining the desired output structure.
             temperature: Creativity/randomness control (default 0.2 for strict JSON).
-            model: Override the configured model for this single call (used for model-level
-                failover, e.g. a faster backup model). Falls back to self.model_name.
-            prefer_json_object: Skip the beta structured-parse attempt and go straight to the
-                json_object path. Saves one round-trip on hosts (e.g. Gemini's OpenAI endpoint)
-                that do not support beta.parse — important for latency-critical callers.
 
         Returns:
             An instance of response_schema populated with the LLM output.
@@ -80,7 +72,6 @@ class LLMClientAdapter:
             ValidationError: If LLM output fails schema validation.
             APIStatusError: If LLM API returns an unrecoverable HTTP status.
         """
-        model_name = model or self.model_name
         # Append schema description to system prompt for models that need explicit schema cues
         schema_json = json.dumps(response_schema.model_json_schema(), ensure_ascii=False)
         augmented_system_prompt = (
@@ -92,37 +83,34 @@ class LLMClientAdapter:
 
         try:
             # First attempt structured parsing using client.beta.chat.completions.parse if supported
-            if not prefer_json_object:
-                try:
-                    completion = await self.client.beta.chat.completions.parse(
-                        model=model_name,
-                        messages=[
-                            {"role": "system", "content": augmented_system_prompt},
-                            {"role": "user", "content": user_prompt},
-                        ],
-                        response_format=response_schema,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                    )
-                    if completion.choices and completion.choices[0].message.parsed:
-                        return completion.choices[0].message.parsed
-                except Exception as parse_error:
-                    logger.debug(
-                        "Standard beta parse not supported by host (%s), falling back to json_object: %s",
-                        self.base_url,
-                        parse_error,
-                    )
+            try:
+                completion = await self.client.beta.chat.completions.parse(
+                    model=self.model_name,
+                    messages=[
+                        {"role": "system", "content": augmented_system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    response_format=response_schema,
+                    temperature=temperature,
+                )
+                if completion.choices and completion.choices[0].message.parsed:
+                    return completion.choices[0].message.parsed
+            except Exception as parse_error:
+                logger.debug(
+                    "Standard beta parse not supported by host (%s), falling back to json_object: %s",
+                    self.base_url,
+                    parse_error,
+                )
 
             # Fallback to standard chat completions with json_object format
             response = await self.client.chat.completions.create(
-                model=model_name,
+                model=self.model_name,
                 messages=[
                     {"role": "system", "content": augmented_system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
                 response_format={"type": "json_object"},
                 temperature=temperature,
-                max_tokens=max_tokens,
             )
 
             raw_content = response.choices[0].message.content or "{}"

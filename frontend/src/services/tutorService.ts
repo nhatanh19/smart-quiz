@@ -1,4 +1,4 @@
-import apiClient from "@/lib/api-client";
+import { apiClient } from "@/lib/apiClient";
 import { ApiResponse } from "@/types";
 
 export interface AITutorFeedback {

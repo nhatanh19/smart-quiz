@@ -120,7 +120,7 @@ def test_llm_success_path_returns_llm_feedback(monkeypatch):
 def test_primary_model_timeout_fails_over_to_backup_model(monkeypatch):
     """When the primary model is slow, the backup model answers before we touch rule-based."""
     monkeypatch.setattr(settings, "LLM_MODEL_NAME", "model-primary-slow")
-    monkeypatch.setattr(settings, "LLM_FALLBACK_MODEL_NAME", "model-backup-fast")
+    monkeypatch.setenv("LLM_FALLBACK_MODEL_NAME", "model-backup-fast")
 
     backup_feedback = AITutorFeedbackSchema(
         explanation="Backup model giải thích A đúng.",
@@ -128,8 +128,11 @@ def test_primary_model_timeout_fails_over_to_backup_model(monkeypatch):
         study_suggestions=["Ôn WBS", "Phân biệt WBS và Schedule"],
     )
 
+    attempts = 0
     async def routed_llm(**kwargs):
-        if kwargs.get("model") == "model-primary-slow":
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
             await asyncio.sleep(10)  # primary hangs -> per-model timeout fires
         return backup_feedback
 
