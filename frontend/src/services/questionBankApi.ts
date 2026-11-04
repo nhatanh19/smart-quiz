@@ -14,6 +14,8 @@ const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api/v1",
 });
 
+const questionBankPath = "/ai-generator/question-bank";
+
 api.interceptors.request.use((config) => {
   const token =
     localStorage.getItem("access_token") || localStorage.getItem("token");
@@ -57,38 +59,41 @@ export function listQuestions(
   signal?: AbortSignal,
 ): Promise<ApiResponse<Question[]>> {
   return api
-    .get<ApiResponse<Question[]>>("/parser/questions", { params, signal })
+    .get<ApiResponse<Question[]>>(`${questionBankPath}/questions`, { params, signal })
     .then(({ data }) => data);
 }
 
 export async function listSubjects(): Promise<Subject[]> {
-  return getData<Subject[]>("/parser/subjects");
+  return getData<Subject[]>(`${questionBankPath}/subjects`);
 }
 
 export async function listCategories(): Promise<Category[]> {
-  return getData<Category[]>("/parser/categories");
+  return getData<Category[]>(`${questionBankPath}/categories`);
 }
 
 export async function createQuestion(payload: QuestionPayload): Promise<void> {
-  await api.post("/parser/questions", payload);
+  await api.post(`${questionBankPath}/questions`, payload);
 }
 
 export async function updateQuestion(
   questionId: string,
   payload: QuestionPayload,
 ): Promise<void> {
-  await api.patch(`/parser/questions/${questionId}`, payload);
+  await api.patch(`${questionBankPath}/questions/${questionId}`, payload);
 }
 
 export async function deleteQuestion(questionId: string): Promise<void> {
-  await api.delete(`/parser/questions/${questionId}`);
+  await api.delete(`${questionBankPath}/questions/${questionId}`);
 }
 
 export async function createSubject(payload: {
   name: string;
   description: string | null;
 }): Promise<ApiResponse<Subject>> {
-  const response = await api.post<ApiResponse<Subject>>("/parser/subjects", payload);
+  const response = await api.post<ApiResponse<Subject>>(
+    `${questionBankPath}/subjects`,
+    payload,
+  );
   return response.data;
 }
 
@@ -98,7 +103,7 @@ export async function createCategory(payload: {
   subject_id: string;
 }): Promise<ApiResponse<Category>> {
   const response = await api.post<ApiResponse<Category>>(
-    "/parser/categories",
+    `${questionBankPath}/categories`,
     payload,
   );
   return response.data;
@@ -108,5 +113,7 @@ export async function assignCategorySubject(
   categoryId: string,
   subjectId: string,
 ): Promise<void> {
-  await api.patch(`/parser/categories/${categoryId}`, { subject_id: subjectId });
+  await api.patch(`${questionBankPath}/categories/${categoryId}`, {
+    subject_id: subjectId,
+  });
 }

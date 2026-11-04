@@ -8,8 +8,8 @@
 ## 📌 Giới thiệu Dự án
 
 **Smart Quiz** là giải pháp toàn diện hỗ trợ Giảng viên và Sinh viên trong toàn bộ chu trình kiểm tra, đánh giá và ôn luyện kiến thức:
-1. **Module 1 (File Parser & Question Bank):** Bóc tách tài liệu tự động (PDF, DOCX, TXT) bằng biểu thức chính quy thành các câu hỏi trắc nghiệm, quản lý ngân hàng câu hỏi theo chuyên đề và mức độ nhận thức Bloom.
-2. **Module 2 (AI Quiz Generator & Exam Matrix):** Sinh đề thi thông minh bám sát ma trận năng lực và ngữ cảnh tài liệu học liệu bằng mô hình ngôn ngữ lớn (LLM - OpenAI / Gemini).
+1. **Module 1 (File Parser):** Bóc tách tài liệu tự động (PDF, DOCX, TXT) bằng biểu thức chính quy thành các câu hỏi trắc nghiệm.
+2. **Module 2 (AI Quiz Generator & Question Bank):** Quản lý ngân hàng câu hỏi theo chuyên đề và mức độ nhận thức Bloom; sinh đề thi thông minh bám sát ma trận năng lực và ngữ cảnh tài liệu học liệu bằng mô hình ngôn ngữ lớn (LLM - OpenAI / Gemini).
 3. **Module 3 (Online Exam Engine & Anti-Cheat):** Tổ chức thi trực tuyến với thuật toán xáo trộn câu hỏi/đáp án độc lập cho từng thí sinh, giao diện tập trung và hệ thống giám sát vi phạm (chuyển tab, mất tiêu điểm, chặn sao chép).
 4. **Module 4 (Auto-Grading, AI Tutor & Analytics):** Chấm điểm tự động tức thì, tích hợp Gia sư ảo (AI Tutor) giải thích chi tiết phương án và bảng phân tích tiến độ học tập / phổ điểm lớp học.
 
@@ -50,6 +50,11 @@ python scripts/seed.py
 uvicorn app.main:app --reload --port 8000
 ```
 Swagger UI API Docs: `http://localhost:8000/docs`
+
+Chạy unit test cho API Question Bank:
+```bash
+python -m unittest discover -s tests -v
+```
 
 ### 2. Khởi chạy Frontend
 ```bash

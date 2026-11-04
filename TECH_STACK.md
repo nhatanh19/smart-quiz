@@ -104,8 +104,8 @@ Hệ thống cung cấp sẵn lớp chuyển tiếp **`LLMClientAdapter`** tại
 
 | Thành viên | Trách nhiệm chính (WBS) | Thư mục Backend (`backend/app/modules/`) | Thư mục Frontend (`frontend/src/pages/`) |
 | :--- | :--- | :--- | :--- |
-| **Dev 1 (Team Leader)** | **Module 1:** File Parser Engine (PDF/DOCX/TXT) & Question Bank CRUD (WBS 1.1, 2.1, 2.2) | `backend/app/modules/parser/` | `frontend/src/pages/parser/` |
-| **Dev 2 (AI Engineer)** | **Module 2:** AI Quiz Generator, Exam Matrix Builder & Document Context Quiz (WBS 3.1, 3.2, 3.3) | `backend/app/modules/ai_generator/` | `frontend/src/pages/ai-generator/` |
+| **Dev 1 (Team Leader)** | **Module 1:** File Parser Engine (PDF/DOCX/TXT) & Question Bank UI (WBS 1.1, 2.1, 2.2) | `backend/app/modules/parser/` | `frontend/src/pages/parser/` |
+| **Dev 2 (AI Engineer)** | **Module 2:** AI Quiz Generator, Question Bank API, Exam Matrix Builder & Document Context Quiz (WBS 3.1, 3.2, 3.3) | `backend/app/modules/ai_generator/` | `frontend/src/pages/ai-generator/` |
 | **Dev 3 (Core Engine)** | **Module 3:** Auth/RBAC, Online Exam Engine, Shuffling & Anti-cheat Monitor (WBS 1.2, 4.1, 4.2, 4.3) | `backend/app/modules/auth/`<br/>`backend/app/modules/exam_engine/` | `frontend/src/pages/auth/`<br/>`frontend/src/pages/exam/` |
 | **Dev 4 (Data & Tutor)** | **Module 4:** Auto-Grading Engine, Contextual AI Tutor & Analytics Dashboard (WBS 5.1, 5.2, 5.3) | `backend/app/modules/tutor_analytics/` | `frontend/src/pages/tutor-analytics/` |
 
