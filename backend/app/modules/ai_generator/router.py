@@ -1,9 +1,12 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+
 from app.core.database import get_db
+from app.modules.ai_generator.question_bank_router import router as question_bank_router
 from app.schemas.common import APIResponse, HealthCheckResponse
 
 router = APIRouter(prefix="/ai-generator", tags=["Module 2: AI Quiz Generator (Dev 2)"])
+router.include_router(question_bank_router, prefix="/question-bank")
 
 
 @router.get("/health", response_model=HealthCheckResponse)

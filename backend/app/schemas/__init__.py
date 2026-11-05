@@ -7,8 +7,16 @@ from app.schemas.common import (
     UserBase,
     UserCreate,
     UserResponse,
+    SubjectCreateSchema,
+    SubjectResponseSchema,
+    CategoryCreateSchema,
+    CategoryUpdateSchema,
+    CategoryResponseSchema,
     QuestionOptionSchema,
     QuestionBaseSchema,
+    QuestionCreateSchema,
+    QuestionUpdateSchema,
+    QuestionResponseSchema,
 )
 
 __all__ = [
@@ -20,6 +28,14 @@ __all__ = [
     "UserBase",
     "UserCreate",
     "UserResponse",
+    "SubjectCreateSchema",
+    "SubjectResponseSchema",
+    "CategoryCreateSchema",
+    "CategoryUpdateSchema",
+    "CategoryResponseSchema",
     "QuestionOptionSchema",
     "QuestionBaseSchema",
+    "QuestionCreateSchema",
+    "QuestionUpdateSchema",
+    "QuestionResponseSchema",
 ]

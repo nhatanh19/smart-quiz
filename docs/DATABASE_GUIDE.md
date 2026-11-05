@@ -54,10 +54,20 @@ erDiagram
         timestamptz updated_at
     }
 
+    subjects {
+        uuid id PK
+        varchar name
+        text description
+        uuid created_by FK
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
     categories {
         uuid id PK
         varchar name
         text description
+        uuid subject_id FK
         uuid created_by FK
         timestamptz created_at
         timestamptz updated_at
@@ -70,7 +80,9 @@ erDiagram
         text content
         question_type question_type
         cognitive_level cognitive_level
+        question_level level
         jsonb options
+        jsonb tags
         text explanation
         question_source source_type
         timestamptz created_at
@@ -149,6 +161,7 @@ Các kiểu Enum này được tạo ở mức Database Engine (PostgreSQL Nativ
 | **`user_role`** | `'ADMIN'`, `'INSTRUCTOR'`, `'STUDENT'` | Phân quyền vai trò người dùng hệ thống (RBAC). |
 | **`question_type`** | `'SINGLE_CHOICE'`, `'MULTIPLE_CHOICE'`, `'TRUE_FALSE'` | Phân loại định dạng câu hỏi trắc nghiệm (1 đáp án, nhiều đáp án, đúng/sai). |
 | **`cognitive_level`** | `'REMEMBER'`, `'UNDERSTAND'`, `'APPLY'` | Thang đo nhận thức Bloom: Nhận biết, Thông hiểu, Vận dụng. |
+| **`question_level`** | `'EASY'`, `'MEDIUM'`, `'HARD'` | Độ khó câu hỏi, tách biệt với số điểm của câu hỏi trong từng đề thi. |
 | **`attempt_status`** | `'IN_PROGRESS'`, `'SUBMITTED'`, `'LOCKED_VIOLATION'`, `'EXPIRED'` | Vòng đời bài làm của sinh viên: Đang làm, Đã nộp, Khóa do gian lận, Hết giờ. |
 | **`question_source`** | `'MANUAL'`, `'FILE_PARSER'`, `'AI_GENERATED'` | Nguồn gốc câu hỏi: Nhập thủ công, Bóc tách từ file tài liệu, hoặc AI sinh. |
 
@@ -188,6 +201,8 @@ Các kiểu Enum này được tạo ở mức Database Engine (PostgreSQL Nativ
   * `content` (`text`): Nội dung câu hỏi (chấp nhận text/markdown/HTML).
   * `question_type` (`question_type`): Dạng câu hỏi.
   * `cognitive_level` (`cognitive_level`): Mức nhận thức Bloom.
+  * `level` (`question_level`): Độ khó EASY/MEDIUM/HARD; độc lập với `exam_questions.points`.
+  * `tags` (`jsonb`): Danh sách tag tự do phục vụ phân loại và tìm kiếm.
   * `options` (`jsonb`): Danh sách lựa chọn đáp án.
   * `explanation` (`text`, nullable): Lời giải thích gốc cho câu hỏi.
   * `source_type` (`question_source`): Nguồn tạo (mặc định `'MANUAL'`).
@@ -196,6 +211,9 @@ Các kiểu Enum này được tạo ở mức Database Engine (PostgreSQL Nativ
 * **Chỉ mục:**
   * `ix_questions_creator_category` trên `(creator_id, category_id)`.
   * `ix_questions_matrix` trên `(category_id, cognitive_level, question_type)` hỗ trợ thuật toán lọc ma trận siêu tốc.
+  * `ix_questions_category_level` trên `(category_id, level)` hỗ trợ lọc câu hỏi theo chuyên đề và độ khó.
+  * `ix_questions_content_trgm` (GIN/`pg_trgm`) hỗ trợ tìm từ khóa trong nội dung câu hỏi.
+  * `ix_questions_tags` (GIN) hỗ trợ tìm kiếm theo tag.
 
 ---
 

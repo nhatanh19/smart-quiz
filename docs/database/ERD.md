@@ -10,10 +10,12 @@
 ```mermaid
 erDiagram
     users ||--o{ categories : "creates (1:N)"
+    users ||--o{ subjects : "creates (1:N)"
     users ||--o{ questions : "creates (1:N)"
     users ||--o{ exams : "instructs (1:N)"
     users ||--o{ exam_attempts : "takes (1:N)"
 
+    subjects ||--o{ categories : "groups (1:N)"
     categories ||--o{ questions : "contains (1:N)"
 
     exams ||--o{ exam_questions : "includes (1:N)"
@@ -37,10 +39,20 @@ erDiagram
         timestamptz updated_at "UTC timestamp"
     }
 
+    subjects {
+        uuid id PK "gen_random_uuid()"
+        varchar name "Tên môn học"
+        text description "Mô tả môn học"
+        uuid created_by FK "users.id (ON DELETE RESTRICT)"
+        timestamptz created_at "UTC timestamp"
+        timestamptz updated_at "UTC timestamp"
+    }
+
     categories {
         uuid id PK "gen_random_uuid()"
         varchar name "Tên chuyên đề"
         text description "Mô tả học phần"
+        uuid subject_id FK "subjects.id (nullable for legacy topics)"
         uuid created_by FK "users.id (ON DELETE RESTRICT)"
         timestamptz created_at "UTC timestamp"
         timestamptz updated_at "UTC timestamp"
@@ -53,7 +65,9 @@ erDiagram
         text content "Nội dung câu hỏi"
         question_type question_type "SINGLE_CHOICE | MULTIPLE_CHOICE | TRUE_FALSE"
         cognitive_level cognitive_level "REMEMBER | UNDERSTAND | APPLY"
+        question_level level "EASY | MEDIUM | HARD"
         jsonb options "Mảng JSONB từ 2 đến 10 phương án"
+        jsonb tags "Danh sách tag tự do"
         text explanation "Lời giải thích chuẩn"
         question_source source_type "MANUAL | FILE_PARSER | AI_GENERATED"
         timestamptz created_at "UTC timestamp"
@@ -128,8 +142,9 @@ erDiagram
 1. **`user_role`**: `'ADMIN'`, `'INSTRUCTOR'`, `'STUDENT'`
 2. **`question_type`**: `'SINGLE_CHOICE'`, `'MULTIPLE_CHOICE'`, `'TRUE_FALSE'`
 3. **`cognitive_level`**: `'REMEMBER'`, `'UNDERSTAND'`, `'APPLY'`
-4. **`attempt_status`**: `'IN_PROGRESS'`, `'SUBMITTED'`, `'LOCKED_VIOLATION'`, `'EXPIRED'`
-5. **`question_source`**: `'MANUAL'`, `'FILE_PARSER'`, `'AI_GENERATED'`
+4. **`question_level`**: `'EASY'`, `'MEDIUM'`, `'HARD'` (độ khó câu hỏi, độc lập với điểm khi đưa vào đề)
+5. **`attempt_status`**: `'IN_PROGRESS'`, `'SUBMITTED'`, `'LOCKED_VIOLATION'`, `'EXPIRED'`
+6. **`question_source`**: `'MANUAL'`, `'FILE_PARSER'`, `'AI_GENERATED'`
 
 ---
 
@@ -138,6 +153,8 @@ erDiagram
 | Bảng nguồn | Cột FK | Bảng đích | Ràng buộc `ON DELETE` | Mục đích nghiệp vụ |
 | :--- | :--- | :--- | :---: | :--- |
 | `categories` | `created_by` | `users(id)` | **RESTRICT** | Không cho xóa user đang sở hữu chuyên đề. |
+| `subjects` | `created_by` | `users(id)` | **RESTRICT** | Không cho xóa user đang sở hữu môn học. |
+| `categories` | `subject_id` | `subjects(id)` | **SET NULL** | Giữ lại chuyên đề cũ nếu môn học bị xóa. |
 | `questions` | `category_id` | `categories(id)` | **RESTRICT** | Chuyên đề có câu hỏi thì không được xóa thẳng. |
 | `questions` | `creator_id` | `users(id)` | **RESTRICT** | Giữ lịch sử tác giả tạo câu hỏi. |
 | `exams` | `instructor_id` | `users(id)` | **RESTRICT** | Bảo toàn danh tính giảng viên ra đề. |
