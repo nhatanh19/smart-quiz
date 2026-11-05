@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import require_roles
+from app.core.security import get_current_user, require_roles
 from app.models.entities import AttemptAnswer, ExamAttempt, Question, User, UserRole
 from app.modules.tutor_analytics.exceptions import (
     InvalidAttemptStateError,
@@ -20,6 +20,7 @@ from app.modules.tutor_analytics.schemas import (
 )
 from app.modules.tutor_analytics.service import ai_tutor_service
 from app.modules.tutor_analytics.services.grading_service import grade_attempt
+from app.modules.tutor_analytics.services.review_service import get_exam_review_data
 from app.schemas.common import APIResponse, HealthCheckResponse
 
 router = APIRouter(prefix="/tutor-analytics", tags=["Module 4: AI Tutor & Analytics (Dev 4)"])
@@ -139,64 +140,51 @@ async def explain_attempt_question(
         )
 
 
+# ==============================================================================
+# ISSUE #15: POST-EXAM DETAILED REVIEW MODE (WBS 5.1.2)
+# ==============================================================================
+
+
 @router.get("/review/{attempt_id}", response_model=APIResponse[Dict[str, Any]])
-def get_attempt_review(attempt_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_attempt_review(
+    attempt_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Retrieve detailed exam review mode for a finished attempt.
 
-    Connects Issue #15 (Review Mode) & Issue #16 (AI Tutor Feedback).
+    Connects Issue #15 (Review Mode Interface) & Issue #16 (AI Tutor Feedback).
+    - Verifies attempt is submitted/finished.
+    - Role check: Student can view own attempt; Instructor/Admin can view any.
+    - Preserves question/options ordering from question_order_snapshot.
     """
-    attempt = db.query(ExamAttempt).filter(ExamAttempt.id == attempt_id).first()
-    if not attempt:
+    try:
+        data = get_exam_review_data(db, attempt_id, current_user=current_user)
+        return APIResponse(
+            success=True,
+            message="Review mode data retrieved successfully",
+            data=data,
+        )
+    except NotFoundError as err:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Exam attempt with id '{attempt_id}' not found.",
+            detail=str(err),
         )
-
-    answers = (
-        db.query(AttemptAnswer)
-        .filter(AttemptAnswer.attempt_id == attempt_id)
-        .all()
-    )
-
-    questions_review = []
-    for ans in answers:
-        q = db.query(Question).filter(Question.id == ans.question_id).first()
-        if not q:
-            continue
-
-        options = q.options if isinstance(q.options, list) else []
-        correct_options = [
-            opt.get("id") for opt in options if opt.get("is_correct") is True
-        ]
-
-        questions_review.append(
-            {
-                "question_id": str(q.id),
-                "content": q.content,
-                "question_type": q.question_type.value if hasattr(q.question_type, "value") else str(q.question_type),
-                "cognitive_level": q.cognitive_level.value if hasattr(q.cognitive_level, "value") else str(q.cognitive_level),
-                "options": options,
-                "selected_options": ans.selected_options or [],
-                "correct_options": correct_options,
-                "is_correct": ans.is_correct,
-                "points_awarded": ans.points_awarded,
-                "ai_tutor_feedback": ans.ai_tutor_feedback,
-            }
+    except PermissionError as err:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(err),
         )
-
-    return APIResponse(
-        success=True,
-        message="Review mode data retrieved successfully",
-        data={
-            "attempt_id": str(attempt.id),
-            "exam_id": str(attempt.exam_id),
-            "score": attempt.score,
-            "status": attempt.status.value if hasattr(attempt.status, "value") else str(attempt.status),
-            "total_questions": len(questions_review),
-            "correct_count": sum(1 for q in questions_review if q["is_correct"]),
-            "questions_review": questions_review,
-        },
-    )
+    except InvalidAttemptStateError as err:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(err),
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi khi tải giao diện xem lại bài thi: {str(exc)}",
+        )
 
 
 # ==============================================================================

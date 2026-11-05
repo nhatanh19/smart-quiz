@@ -13,6 +13,7 @@ import ParserPlaceholder from "@/pages/parser/ParserPlaceholder";
 import AiGenPlaceholder from "@/pages/ai-generator/AiGenPlaceholder";
 import ExamPlaceholder from "@/pages/exam/ExamPlaceholder";
 import AnalyticsPlaceholder from "@/pages/tutor-analytics/AnalyticsPlaceholder";
+import ReviewExamView from "@/pages/tutor-analytics/ReviewExamView";
 
 /**
  * AppRoutes:
@@ -36,6 +37,9 @@ export const AppRoutes: React.FC = () => {
           <Route path="/parser" element={<ParserPlaceholder />} />
           <Route path="/ai-generator" element={<AiGenPlaceholder />} />
           <Route path="/analytics" element={<AnalyticsPlaceholder />} />
+          {/* Post-Exam Review Mode Interface (Issue #15, WBS 5.1.2) */}
+          <Route path="/review" element={<ReviewExamView />} />
+          <Route path="/review/:attemptId" element={<ReviewExamView />} />
         </Route>
 
         {/* 3. Focused Exam Room (Wrapped in Isolated ExamFocusLayout for Module 3) */}
