@@ -1,6 +1,7 @@
 """Service for Knowledge Gap Diagnosis & Actionable Study Advice (Issue #17, WBS 5.2.2)."""
 
 from datetime import datetime, timezone
+import json
 from typing import Any, Dict, List, Optional
 import uuid
 from sqlalchemy.orm import Session, joinedload
@@ -116,8 +117,15 @@ def diagnose_knowledge_gaps(
 
         # Extract topics for this question
         topics: List[str] = []
-        if isinstance(q.tags, list) and q.tags:
-            topics.extend([str(t).strip() for t in q.tags if str(t).strip()])
+        raw_tags = q.tags
+        if isinstance(raw_tags, str):
+            try:
+                raw_tags = json.loads(raw_tags)
+            except Exception:
+                raw_tags = [raw_tags]
+
+        if isinstance(raw_tags, list) and raw_tags:
+            topics.extend([str(t).strip() for t in raw_tags if str(t).strip()])
         if not topics and q.category and q.category.name:
             topics.append(q.category.name.strip())
         if not topics:
