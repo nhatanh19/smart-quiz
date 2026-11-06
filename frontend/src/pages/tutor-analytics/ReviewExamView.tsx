@@ -20,63 +20,110 @@ import {
   tutorService,
   ReviewQuestionItem,
   ExamReviewData,
+  KnowledgeGapData,
 } from "@/services/tutorService";
 import AITutorExplanationCard from "@/components/tutor/AITutorExplanationCard";
+import KnowledgeGapCard from "@/components/tutor/KnowledgeGapCard";
 
-// Sample realistic exam attempt data matching seed.py (Quản trị dự án phần mềm)
+// Sample realistic exam attempt data matching seed.py (Quản trị dự án phần mềm / OOP)
 const SAMPLE_REVIEW_QUESTIONS: ReviewQuestionItem[] = [
   {
     id: "q-1",
-    content: "Trong chuẩn quản lý dự án PMBOK, WBS (Work Breakdown Structure) được định nghĩa là gì?",
+    content: "Trong C++, hàm ảo (virtual function) và con trỏ lớp cơ sở phục vụ cho nguyên lý nào trong Lập trình hướng đối tượng?",
     question_type: "SINGLE_CHOICE",
-    cognitive_level: "REMEMBER",
+    cognitive_level: "UNDERSTAND",
     options: [
-      { id: "A", text: "Cấu trúc phân rã công việc định hướng theo sản phẩm bàn giao (Deliverable-oriented hierarchical decomposition)", is_correct: true },
-      { id: "B", text: "Bảng phân bổ ngân sách chi tiết và lịch biểu thanh toán hàng tuần của dự án", is_correct: false },
-      { id: "C", text: "Báo cáo tổng kết khối lượng công việc hàng tuần của nhóm Scrum", is_correct: false },
-      { id: "D", text: "Hệ thống quản lý quy trình luồng công việc tự động trên Jira", is_correct: false },
+      { id: "A", text: "Tính đa hình động tại thời điểm chạy (Runtime Polymorphism)", is_correct: true },
+      { id: "B", text: "Tính đóng gói dữ liệu và ẩn giấu thông tin (Encapsulation)", is_correct: false },
+      { id: "C", text: "Tính đơn kế thừa và tái sử dụng mã nguồn", is_correct: false },
+      { id: "D", text: "Tính trừu tượng hóa mức độ phần cứng", is_correct: false },
     ],
     selected_options: ["B"], // Student answered WRONG
     correct_options: ["A"],
     is_correct: false,
     points_awarded: 0.0,
-    explanation_note: "WBS là cấu trúc phân rã công việc mang tính định hướng bàn giao (Deliverable-oriented), tuân thủ quy tắc 100% Rule.",
+    explanation_note: "Hàm ảo (virtual function) kết hợp bảng vtable cho phép gọi phương thức nạp chồng của lớp dẫn xuất qua con trỏ lớp cơ sở tại runtime.",
   },
   {
     id: "q-2",
-    content: "Theo mô hình Agile/Scrum, nguyên tắc 'WIP Limit' (Work In Progress Limit) trên Kanban Board có mục đích cốt lõi là gì?",
+    content: "Từ khóa nào trong ngôn ngữ Java hoặc C# được sử dụng để ngăn chặn một lớp bị kế thừa bởi bất kỳ lớp con nào khác?",
     question_type: "SINGLE_CHOICE",
-    cognitive_level: "UNDERSTAND",
+    cognitive_level: "REMEMBER",
     options: [
-      { id: "A", text: "Ngăn chặn nghẽn cổ chai (bottlenecks), tối ưu hóa lưu lượng luân chuyển công việc và nâng cao chất lượng", is_correct: true },
-      { id: "B", text: "Bắt buộc mọi lập trình viên phải hoàn thành tất cả task trước giờ Daily Standup", is_correct: false },
-      { id: "C", text: "Giới hạn số giờ làm việc thêm (overtime) của thành viên trong tuần", is_correct: false },
-      { id: "D", text: "Tự động phân công công việc từ Backlog sang cột In Progress", is_correct: false },
+      { id: "A", text: "final (Java) hoặc sealed (C#)", is_correct: true },
+      { id: "B", text: "abstract", is_correct: false },
+      { id: "C", text: "static", is_correct: false },
+      { id: "D", text: "protected internal", is_correct: false },
+    ],
+    selected_options: ["B"], // Student answered WRONG
+    correct_options: ["A"],
+    is_correct: false,
+    points_awarded: 0.0,
+    explanation_note: "Lớp 'final' trong Java hoặc 'sealed' trong C# đóng băng cây phân cấp kế thừa, ngăn các lớp con mở rộng.",
+  },
+  {
+    id: "q-3",
+    content: "Design Pattern nào đảm bảo một lớp chỉ có duy nhất một đối tượng thể hiện trong suốt vòng đời của ứng dụng?",
+    question_type: "SINGLE_CHOICE",
+    cognitive_level: "APPLY",
+    options: [
+      { id: "A", text: "Singleton Pattern", is_correct: true },
+      { id: "B", text: "Factory Method Pattern", is_correct: false },
+      { id: "C", text: "Observer Pattern", is_correct: false },
+      { id: "D", text: "Adapter Pattern", is_correct: false },
     ],
     selected_options: ["A"], // Student answered CORRECT
     correct_options: ["A"],
     is_correct: true,
     points_awarded: 3.33,
-    explanation_note: "WIP Limit hạn chế số lượng công việc được triển khai đồng thời trong một giai đoạn để tránh tắc nghẽn.",
-  },
-  {
-    id: "q-3",
-    content: "Trong một dự án phần mềm gồm 4 thành viên, Scrum Master phát hiện hai lập trình viên cùng nhận hai Issue phụ thuộc chéo vào CSDL của nhau dẫn đến tắc nghẽn. Giải pháp kiến trúc nào là phù hợp nhất theo tài liệu dự án?",
-    question_type: "SINGLE_CHOICE",
-    cognitive_level: "APPLY",
-    options: [
-      { id: "A", text: "Yêu cầu cả 2 dev tạm dừng, đợi Tech Leader thiết kế xong toàn bộ DB mới bắt đầu viết code", is_correct: false },
-      { id: "B", text: "Áp dụng nguyên tắc Decoupled Rule: thống nhất Interface/Contract sớm, lập trình viên sử dụng Mock Data độc lập", is_correct: true },
-      { id: "C", text: "Gộp 2 Issue lại thành 1 Issue lớn và chỉ giao cho 1 người làm từ đầu đến cuối", is_correct: false },
-      { id: "D", text: "Chuyển dự án từ Agile/Scrum sang mô hình Thác nước (Waterfall)", is_correct: false },
-    ],
-    selected_options: ["A"], // Student answered WRONG
-    correct_options: ["B"],
-    is_correct: false,
-    points_awarded: 0.0,
-    explanation_note: "Nguyên tắc Decoupled Rule khóa hợp đồng giao tiếp sớm (Interfaces/Schemas) cho phép các thành viên làm việc song song với Mock data.",
+    explanation_note: "Singleton Pattern sử dụng private constructor và static instance để kiểm soát khởi tạo độc nhất.",
   },
 ];
+
+// Sample Knowledge Gap Diagnostic matching Issue #17 Acceptance Criteria
+const SAMPLE_KNOWLEDGE_GAP_DATA: KnowledgeGapData = {
+  attempt_id: "sample-attempt-oop",
+  exam_id: "sample-exam-oop",
+  summary_headline: "Chủ đề bạn cần củng cố: Kế thừa & Đa hình trong OOP",
+  primary_weak_topic: "Kế thừa & Đa hình trong OOP",
+  has_gaps: true,
+  total_wrong: 2,
+  total_questions: 3,
+  weak_topics: [
+    {
+      topic: "Kế thừa & Đa hình trong OOP",
+      wrong_count: 2,
+      total_questions: 2,
+      accuracy_percentage: 0.0,
+      question_ids: ["q-1", "q-2"],
+      cognitive_levels: ["UNDERSTAND", "REMEMBER"],
+    },
+  ],
+  advice: [
+    {
+      title: "Củng cố lý thuyết & nguyên lý cốt lõi về Đa hình (Polymorphism)",
+      description: "Đọc lại tài liệu chuyên đề về Virtual Functions, vtable, và phân biệt rõ nạp chồng phương thức (Overriding vs Overloading). Đặc biệt lưu ý cơ chế dispatch động khi gọi qua con trỏ hoặc tham chiếu lớp cha.",
+      action_type: "REVIEW_THEORY",
+      priority: "HIGH",
+      resource_hint: "Chuyên đề: Kế thừa & Đa hình trong OOP",
+    },
+    {
+      title: "Luyện tập 10 bài tập trắc nghiệm chuyên sâu",
+      description: "Thực hành thêm 5–10 câu hỏi trắc nghiệm chuyên sâu về 'Kế thừa & Đa hình trong OOP' ở mức độ Vận dụng (Apply) để rèn luyện phản xạ và nhận diện các bẫy đề thi hay gặp.",
+      action_type: "PRACTICE_QUIZ",
+      priority: "HIGH",
+      resource_hint: "Ngân hàng đề câu hỏi mức độ Vận dụng: OOP",
+    },
+    {
+      title: "Đối chiếu nguyên nhân sai cùng Gia sư ảo AI",
+      description: "Bấm nút 'Giải thích bằng AI' trên từng câu hỏi làm sai ở màn hình xem lại để nghe AI Tutor phân tích tại sao phương án bạn chọn là sai và hiểu trúng bản chất kiến thức.",
+      action_type: "AI_TUTOR_REVIEW",
+      priority: "MEDIUM",
+      resource_hint: "Tính năng Giải thích ngữ cảnh AI Tutor",
+    },
+  ],
+  generated_at: new Date().toISOString(),
+};
 
 interface ReviewExamViewProps {
   attemptId?: string;
@@ -88,22 +135,24 @@ export const ReviewExamView: React.FC<ReviewExamViewProps> = ({ attemptId: propA
   const effectiveAttemptId = propAttemptId || routeAttemptId;
 
   const [loading, setLoading] = useState<boolean>(false);
+  const [loadingGaps, setLoadingGaps] = useState<boolean>(false);
   const [fetchError, setFetchError] = useState<string>("");
   const [reviewMetadata, setReviewMetadata] = useState<Partial<ExamReviewData>>({
-    exam_title: "Kiểm tra Quản trị Dự án Phần mềm — Sprint 1",
+    exam_title: "Kiểm tra Lập trình Hướng đối tượng OOP & Design Patterns",
     student_name: "Sinh viên Mẫu (student@smartquiz.edu.vn)",
     score: 3.3,
     time_spent_seconds: 750,
   });
 
   const [questions, setQuestions] = useState<ReviewQuestionItem[]>(SAMPLE_REVIEW_QUESTIONS);
+  const [knowledgeGapData, setKnowledgeGapData] = useState<KnowledgeGapData | null>(SAMPLE_KNOWLEDGE_GAP_DATA);
   const [filterMode, setFilterMode] = useState<"ALL" | "INCORRECT" | "CORRECT">("ALL");
   const [loadingQuestions, setLoadingQuestions] = useState<Record<string, boolean>>({});
   const [errorQuestions, setErrorQuestions] = useState<Record<string, string>>({});
   const [elapsedTimers, setElapsedTimers] = useState<Record<string, number>>({});
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({
     "q-1": true,
-    "q-3": true,
+    "q-2": true,
   });
 
   const [customAttemptId, setCustomAttemptId] = useState<string>("");
@@ -111,53 +160,70 @@ export const ReviewExamView: React.FC<ReviewExamViewProps> = ({ attemptId: propA
   useEffect(() => {
     if (!effectiveAttemptId) {
       setQuestions(SAMPLE_REVIEW_QUESTIONS);
+      setKnowledgeGapData(SAMPLE_KNOWLEDGE_GAP_DATA);
       return;
     }
 
     const loadAttemptData = async () => {
       setLoading(true);
+      setLoadingGaps(true);
       setFetchError("");
       try {
-        const data = await tutorService.getAttemptReview(effectiveAttemptId);
-        setReviewMetadata({
-          attempt_id: data.attempt_id,
-          exam_id: data.exam_id,
-          exam_title: data.exam_title,
-          student_id: data.student_id,
-          student_name: data.student_name,
-          score: data.score,
-          time_spent_seconds: data.time_spent_seconds,
-          started_at: data.started_at,
-          submitted_at: data.submitted_at,
-        });
+        const [reviewRes, gapRes] = await Promise.allSettled([
+          tutorService.getAttemptReview(effectiveAttemptId),
+          tutorService.getKnowledgeGaps(effectiveAttemptId),
+        ]);
 
-        // Map response items to internal ReviewQuestionItem
-        const mappedQuestions: ReviewQuestionItem[] = data.questions_review.map((item, index) => ({
-          id: item.question_id,
-          question_id: item.question_id,
-          content: item.content,
-          question_type: item.question_type,
-          cognitive_level: item.cognitive_level,
-          options: item.options,
-          selected_options: item.selected_options || [],
-          correct_options: item.correct_options || [],
-          is_correct: item.is_correct,
-          points_awarded: item.points_awarded,
-          explanation_note: item.explanation,
-          ai_feedback: item.ai_tutor_feedback,
-          order_index: item.order_index || index + 1,
-        }));
+        if (reviewRes.status === "fulfilled") {
+          const data = reviewRes.value;
+          setReviewMetadata({
+            attempt_id: data.attempt_id,
+            exam_id: data.exam_id,
+            exam_title: data.exam_title,
+            student_id: data.student_id,
+            student_name: data.student_name,
+            score: data.score,
+            time_spent_seconds: data.time_spent_seconds,
+            started_at: data.started_at,
+            submitted_at: data.submitted_at,
+          });
 
-        setQuestions(mappedQuestions);
+          // Map response items to internal ReviewQuestionItem
+          const mappedQuestions: ReviewQuestionItem[] = data.questions_review.map((item, index) => ({
+            id: item.question_id,
+            question_id: item.question_id,
+            content: item.content,
+            question_type: item.question_type,
+            cognitive_level: item.cognitive_level,
+            options: item.options,
+            selected_options: item.selected_options || [],
+            correct_options: item.correct_options || [],
+            is_correct: item.is_correct,
+            points_awarded: item.points_awarded,
+            explanation_note: item.explanation,
+            ai_feedback: item.ai_tutor_feedback,
+            order_index: item.order_index || index + 1,
+          }));
 
-        // Auto-expand any question that already has AI feedback
-        const initialExpanded: Record<string, boolean> = {};
-        mappedQuestions.forEach((q) => {
-          if (q.ai_feedback) {
-            initialExpanded[q.id] = true;
-          }
-        });
-        setExpandedCards(initialExpanded);
+          setQuestions(mappedQuestions);
+
+          // Auto-expand any question that already has AI feedback
+          const initialExpanded: Record<string, boolean> = {};
+          mappedQuestions.forEach((q) => {
+            if (q.ai_feedback) {
+              initialExpanded[q.id] = true;
+            }
+          });
+          setExpandedCards(initialExpanded);
+        } else {
+          throw reviewRes.reason;
+        }
+
+        if (gapRes.status === "fulfilled") {
+          setKnowledgeGapData(gapRes.value);
+        } else {
+          console.warn("Could not load knowledge gap diagnostics:", gapRes.reason);
+        }
       } catch (err: any) {
         console.error("Error loading attempt review:", err);
         const errMsg =
@@ -167,6 +233,7 @@ export const ReviewExamView: React.FC<ReviewExamViewProps> = ({ attemptId: propA
         setFetchError(errMsg);
       } finally {
         setLoading(false);
+        setLoadingGaps(false);
       }
     };
 
@@ -268,6 +335,9 @@ export const ReviewExamView: React.FC<ReviewExamViewProps> = ({ attemptId: propA
               </span>
               <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
                 WBS 5.1.2 • Issue #15
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
+                WBS 5.2.2 • Issue #17
               </span>
               {!effectiveAttemptId && (
                 <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-100 text-amber-800 border border-amber-200">
@@ -379,7 +449,15 @@ export const ReviewExamView: React.FC<ReviewExamViewProps> = ({ attemptId: propA
       {/* Main Content (when not loading and no fatal error) */}
       {!loading && (
         <>
-          {/* 2. Filter & Navigation Bar (DoD Requirement 2) */}
+          {/* 2. AI Tutor: Knowledge Gap Diagnostic Card (Issue #17, WBS 5.2.2) */}
+          {knowledgeGapData && (
+            <KnowledgeGapCard
+              data={knowledgeGapData}
+              loading={loadingGaps}
+            />
+          )}
+
+          {/* 3. Filter & Navigation Bar (DoD Requirement 2) */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
             <div className="flex flex-wrap items-center gap-1.5 text-xs font-medium">
               <Filter className="h-4 w-4 text-slate-400 ml-1 mr-1" />
@@ -422,7 +500,7 @@ export const ReviewExamView: React.FC<ReviewExamViewProps> = ({ attemptId: propA
             </div>
           </div>
 
-          {/* 3. Questions List */}
+          {/* 4. Questions List */}
           {filteredQuestions.length === 0 ? (
             <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500">
               <BookOpen className="h-8 w-8 text-slate-400 mx-auto mb-2" />
