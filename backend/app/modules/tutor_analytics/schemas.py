@@ -112,3 +112,53 @@ class AITutorExplanationData(BaseModel):
     response_time_ms: float = Field(
         description="Thời gian xử lý tính bằng mili-giây (DoD: < 3000 ms)"
     )
+
+
+# ==============================================================================
+# ISSUE #15: POST-EXAM DETAILED REVIEW MODE SCHEMAS (WBS 5.1.2)
+# ==============================================================================
+
+
+class QuestionReviewOptionSchema(BaseModel):
+    """Option details including standard correct key flag."""
+
+    id: str
+    text: str
+    is_correct: bool = False
+
+
+class QuestionReviewItemSchema(BaseModel):
+    """Detailed question review item for a student's submitted exam attempt."""
+
+    question_id: uuid.UUID
+    content: str
+    question_type: str
+    cognitive_level: str
+    options: List[QuestionReviewOptionSchema]
+    selected_options: List[str]
+    correct_options: List[str]
+    is_correct: bool
+    points_awarded: float
+    explanation: Optional[str] = None
+    ai_tutor_feedback: Optional[dict] = None
+    order_index: int = 1
+
+
+class ExamReviewResponseSchema(BaseModel):
+    """Top-level review mode payload for an exam attempt."""
+
+    attempt_id: uuid.UUID
+    exam_id: uuid.UUID
+    exam_title: str
+    student_id: uuid.UUID
+    student_name: Optional[str] = None
+    score: Optional[float] = None
+    max_score: float = 10.0
+    status: str
+    started_at: Optional[str] = None
+    submitted_at: Optional[str] = None
+    time_spent_seconds: int = 0
+    total_questions: int
+    correct_count: int
+    incorrect_count: int
+    questions_review: List[QuestionReviewItemSchema]
