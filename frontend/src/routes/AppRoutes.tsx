@@ -13,6 +13,15 @@ import ParserPlaceholder from "@/pages/parser/ParserPlaceholder";
 import AiGenPlaceholder from "@/pages/ai-generator/AiGenPlaceholder";
 import ExamPlaceholder from "@/pages/exam/ExamPlaceholder";
 import AnalyticsPlaceholder from "@/pages/tutor-analytics/AnalyticsPlaceholder";
+import ProfilePage from "@/pages/auth/ProfilePage";
+import ForbiddenPage from "@/pages/auth/ForbiddenPage";
+import { useAuth } from "@/contexts/AuthContext";
+import { homePath, instructorRoles } from "@/lib/permissions";
+
+function HomeRedirect() {
+  const { user } = useAuth();
+  return <Navigate to={user ? homePath(user.role) : "/login"} replace />;
+}
 
 /**
  * AppRoutes:
@@ -32,10 +41,21 @@ export const AppRoutes: React.FC = () => {
       {/* 2. Main Workspace Routes (Wrapped in MainLayout) */}
       <Route element={<ProtectedRoute />}>
         <Route element={<MainLayout />}>
-          <Route path="/" element={<Navigate to="/parser" replace />} />
-          <Route path="/parser" element={<ParserPlaceholder />} />
-          <Route path="/ai-generator" element={<AiGenPlaceholder />} />
-          <Route path="/analytics" element={<AnalyticsPlaceholder />} />
+          <Route path="/" element={<HomeRedirect />} />
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route element={<ProtectedRoute allowedRoles={instructorRoles} />}>
+            <Route path="/instructor/parser" element={<ParserPlaceholder />} />
+            <Route path="/instructor/ai-generator" element={<AiGenPlaceholder />} />
+            <Route path="/instructor/analytics" element={<AnalyticsPlaceholder />} />
+            <Route path="/instructor/*" element={<p>Không tìm thấy trang quản lý.</p>} />
+            <Route path="/parser" element={<Navigate to="/instructor/parser" replace />} />
+            <Route path="/ai-generator" element={<Navigate to="/instructor/ai-generator" replace />} />
+            <Route path="/analytics" element={<Navigate to="/instructor/analytics" replace />} />
+          </Route>
+          <Route element={<ProtectedRoute allowedRoles={["ADMIN"]} />}>
+            <Route path="/admin/*" element={<p>Không tìm thấy trang quản trị.</p>} />
+          </Route>
+          <Route path="/forbidden" element={<ForbiddenPage />} />
         </Route>
 
         {/* 3. Focused Exam Room (Wrapped in Isolated ExamFocusLayout for Module 3) */}

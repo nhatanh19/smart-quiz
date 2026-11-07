@@ -72,8 +72,11 @@ def compile_text_sqlite(element, compiler, **kw):
 
 
 @pytest.fixture(scope="session")
-def grading_db_engine():
-    """In-memory SQLite engine with JSONB and UUID compatibility helpers."""
+def grading_db_engine(auth_engine):
+    """Use the migrated temporary PostgreSQL DB when configured, otherwise SQLite."""
+    if auth_engine.dialect.name == "postgresql":
+        yield auth_engine
+        return
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -126,7 +129,8 @@ def db_session(grading_db_engine):
     """Isolated session per test using a transaction rollback."""
     connection = grading_db_engine.connect()
     transaction = connection.begin()
-    connection.exec_driver_sql("BEGIN")
+    if connection.dialect.name == "sqlite":
+        connection.exec_driver_sql("BEGIN")
     session = Session(bind=connection, join_transaction_mode="create_savepoint")
     try:
         yield session
@@ -796,3 +800,42 @@ def test_grading_performance_under_300ms(db_session):
     assert res.total_questions == 50
     assert res.correct_count == 50
     assert elapsed_ms < 300.0, f"Grading took {elapsed_ms:.2f}ms, exceeding 300ms SLA"
+
+
+@pytest.mark.parametrize("role", ["STUDENT", "INSTRUCTOR", "ADMIN"])
+def test_review_and_grading_ownership(client, db_session, role):
+    instructor, student, admin, _, exam = make_test_environment(db_session)
+    attempt = create_attempt(db_session, exam.id, student.id, [])
+    stranger = User(id=uuid.uuid4(), email="stranger@example.com", full_name="Stranger", password_hash="unused", role=UserRole(role))
+    db_session.add(stranger)
+    db_session.commit()
+    headers = {"Authorization": "Bearer " + create_access_token({"sub": str(stranger.id)})}
+    review = f"/api/v1/tutor-analytics/review/{attempt.id}"
+    assert client.get(review, headers=headers).status_code == (200 if role == "ADMIN" else 403)
+    grade = f"/api/v1/tutor-analytics/grade/{attempt.id}"
+    if role != "ADMIN":
+        assert client.post(grade, headers=headers).status_code == 403
+    own_headers = {"Authorization": "Bearer " + create_access_token({"sub": str(student.id)})}
+    # The owner cannot retrieve answer keys while still taking the exam.
+    assert client.get(review, headers=own_headers).status_code == 403
+
+
+def test_tutor_rejects_question_outside_authorized_attempt(client, db_session):
+    instructor, student, admin, category, exam = make_test_environment(db_session)
+    attempt = create_attempt(db_session, exam.id, student.id, [])
+    db_session.commit()
+    headers = {"Authorization": "Bearer " + create_access_token({"sub": str(instructor.id)})}
+    path = f"/api/v1/tutor-analytics/attempts/{attempt.id}/questions/{uuid.uuid4()}/explain"
+    assert client.post(path, headers=headers).status_code == 403
+    assert client.post("/api/v1/tutor-analytics/explain", headers=headers, json={"attempt_id": str(attempt.id), "question_id": str(uuid.uuid4())}).status_code == 403
+
+
+@pytest.mark.parametrize("method,path", [
+    ("get", "/api/v1/tutor-analytics/review/00000000-0000-0000-0000-000000000001"),
+    ("post", "/api/v1/tutor-analytics/explain"),
+    ("post", "/api/v1/exam-engine/exams/1/start"),
+    ("post", "/api/v1/exam-engine/attempts/1/submit"),
+])
+def test_business_routes_require_authentication(client, method, path):
+    response = client.post(path, json={}) if method == "post" else client.get(path)
+    assert response.status_code == 401
