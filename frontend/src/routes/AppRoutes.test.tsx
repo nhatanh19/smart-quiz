@@ -41,6 +41,12 @@ describe("role protected routes", () => {
     expect(screen.queryByRole("heading", { name: /403/ })).toBeNull();
     expect(screen.getByText("AI Gen (M2)")).toBeTruthy();
   });
+  it.each(["STUDENT", "INSTRUCTOR", "ADMIN"] as UserRole[])("keeps /review route (Issue #15) accessible to %s", role => {
+    auth.user = user(role);
+    open("/review/attempt-id");
+    expect(screen.queryByRole("heading", { name: /403/ })).toBeNull();
+    expect(screen.getByTestId("location").textContent).toBe("/review/attempt-id");
+  });
   it("blocks instructor from admin routes", () => {
     auth.user = user("INSTRUCTOR");
     open("/admin/users");

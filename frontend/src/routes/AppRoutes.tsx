@@ -13,6 +13,7 @@ import ParserPlaceholder from "@/pages/parser/ParserPlaceholder";
 import AiGenPlaceholder from "@/pages/ai-generator/AiGenPlaceholder";
 import ExamPlaceholder from "@/pages/exam/ExamPlaceholder";
 import AnalyticsPlaceholder from "@/pages/tutor-analytics/AnalyticsPlaceholder";
+import ReviewExamView from "@/pages/tutor-analytics/ReviewExamView";
 import ProfilePage from "@/pages/auth/ProfilePage";
 import ForbiddenPage from "@/pages/auth/ForbiddenPage";
 import { useAuth } from "@/contexts/AuthContext";
@@ -56,6 +57,9 @@ export const AppRoutes: React.FC = () => {
             <Route path="/admin/*" element={<p>Không tìm thấy trang quản trị.</p>} />
           </Route>
           <Route path="/forbidden" element={<ForbiddenPage />} />
+          {/* Post-Exam Review Mode Interface (Issue #15, WBS 5.1.2): all authenticated roles; API enforces ownership */}
+          <Route path="/review" element={<ReviewExamView />} />
+          <Route path="/review/:attemptId" element={<ReviewExamView />} />
         </Route>
 
         {/* 3. Focused Exam Room (Wrapped in Isolated ExamFocusLayout for Module 3) */}

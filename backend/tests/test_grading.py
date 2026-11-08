@@ -811,13 +811,14 @@ def test_review_and_grading_ownership(client, db_session, role):
     db_session.commit()
     headers = {"Authorization": "Bearer " + create_access_token({"sub": str(stranger.id)})}
     review = f"/api/v1/tutor-analytics/review/{attempt.id}"
-    assert client.get(review, headers=headers).status_code == (200 if role == "ADMIN" else 403)
+    # ADMIN passes ownership, then the attempt (IN_PROGRESS) is rejected with 400 by the review service.
+    assert client.get(review, headers=headers).status_code == (400 if role == "ADMIN" else 403)
     grade = f"/api/v1/tutor-analytics/grade/{attempt.id}"
     if role != "ADMIN":
         assert client.post(grade, headers=headers).status_code == 403
     own_headers = {"Authorization": "Bearer " + create_access_token({"sub": str(student.id)})}
-    # The owner cannot retrieve answer keys while still taking the exam.
-    assert client.get(review, headers=own_headers).status_code == 403
+    # The owner passes the ownership check first, then the review service rejects IN_PROGRESS (400).
+    assert client.get(review, headers=own_headers).status_code == 400
 
 
 def test_tutor_rejects_question_outside_authorized_attempt(client, db_session):
