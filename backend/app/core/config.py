@@ -1,6 +1,6 @@
 import json
 from typing import List, Union
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -41,10 +41,10 @@ class Settings(BaseSettings):
     COOKIE_SECURE: bool = False
 
     # AI LLM Provider Configuration (OpenAI SDK with Custom Host support)
-    LLM_BASE_URL: str = "https://api.openai.com/v1"
+    LLM_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
     LLM_API_KEY: str = ""
-    LLM_MODEL_NAME: str = "gpt-4o-mini"
-    LLM_TIMEOUT_SECONDS: float = 30.0
+    LLM_MODEL_NAME: str = "gemini-2.5-flash"
+    LLM_TIMEOUT_SECONDS: float = Field(default=15.0, gt=0)
 
     # Seed script password
     SEED_DEFAULT_PASSWORD: str = "SmartQuiz@123"
