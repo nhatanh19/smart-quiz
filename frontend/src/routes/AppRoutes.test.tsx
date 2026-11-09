@@ -10,6 +10,8 @@ const auth = vi.hoisted(() => ({
   logout: vi.fn().mockResolvedValue(undefined), login: vi.fn(),
 }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => auth }));
+// These tests exercise routing; the review page has its own API integration.
+vi.mock("@/pages/tutor-analytics/ReviewExamView", () => ({ default: () => <p>Review page</p> }));
 
 function Location() {
   return <span data-testid="location">{useLocation().pathname}</span>;
