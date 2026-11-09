@@ -14,6 +14,7 @@ from app.core.security import create_access_token
 from app.main import app
 from app.models.entities import (
     Category,
+    ExamAttempt,
     CognitiveLevel,
     Question,
     QuestionLevel,
@@ -66,6 +67,12 @@ class MemoryQuery:
     def order_by(self, *_ordering: Any) -> "MemoryQuery":
         return self
 
+    def with_for_update(self):
+        return self
+
+    def join(self, *args):
+        return self
+
     def _rows(self) -> list[Any]:
         rows = self.session.rows_for(self.model)
         return [
@@ -109,6 +116,7 @@ class MemorySession:
             Subject: self.subjects,
             Category: self.categories,
             Question: self.questions,
+            ExamAttempt: [],
         }[model]
 
     def query(self, model: type) -> MemoryQuery:
