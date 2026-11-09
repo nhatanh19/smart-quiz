@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.core.database import get_db
+from app.core.security import require_roles
+from app.models.entities import UserRole
 from app.schemas.common import APIResponse, HealthCheckResponse
 
 router = APIRouter(prefix="/exam-engine", tags=["Module 3: Online Exam Engine & Anti-cheat (Dev 3)"])
@@ -17,7 +19,7 @@ def exam_engine_health_check():
 # ==============================================================================
 
 
-@router.post("/exams/{exam_id}/start", response_model=APIResponse[dict])
+@router.post("/exams/{exam_id}/start", response_model=APIResponse[dict], dependencies=[Depends(require_roles([UserRole.STUDENT]))])
 def start_exam_placeholder(exam_id: int, db: Session = Depends(get_db)):
     """Start exam attempt placeholder.
 
@@ -31,7 +33,7 @@ def start_exam_placeholder(exam_id: int, db: Session = Depends(get_db)):
     )
 
 
-@router.post("/attempts/{attempt_id}/submit", response_model=APIResponse[dict])
+@router.post("/attempts/{attempt_id}/submit", response_model=APIResponse[dict], dependencies=[Depends(require_roles([UserRole.STUDENT]))])
 def submit_exam_placeholder(attempt_id: int, db: Session = Depends(get_db)):
     """Submit exam attempt placeholder.
 
@@ -45,7 +47,7 @@ def submit_exam_placeholder(attempt_id: int, db: Session = Depends(get_db)):
     )
 
 
-@router.post("/attempts/{attempt_id}/log-violation", response_model=APIResponse[dict])
+@router.post("/attempts/{attempt_id}/log-violation", response_model=APIResponse[dict], dependencies=[Depends(require_roles([UserRole.STUDENT]))])
 def log_violation_placeholder(attempt_id: int, db: Session = Depends(get_db)):
     """Log anti-cheat violation placeholder.
 

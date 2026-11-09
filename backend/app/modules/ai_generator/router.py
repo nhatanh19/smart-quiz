@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.security import require_roles
+from app.models.entities import UserRole
 from app.modules.ai_generator.question_bank_router import router as question_bank_router
 from app.schemas.common import APIResponse, HealthCheckResponse
 
@@ -20,7 +22,7 @@ def ai_generator_health_check():
 # ==============================================================================
 
 
-@router.post("/generate-by-matrix", response_model=APIResponse[dict])
+@router.post("/generate-by-matrix", response_model=APIResponse[dict], dependencies=[Depends(require_roles([UserRole.INSTRUCTOR, UserRole.ADMIN]))])
 async def generate_by_matrix_placeholder():
     """Generate quiz questions via Bloom taxonomy matrix placeholder.
 
@@ -35,7 +37,7 @@ async def generate_by_matrix_placeholder():
     )
 
 
-@router.post("/generate-from-context", response_model=APIResponse[dict])
+@router.post("/generate-from-context", response_model=APIResponse[dict], dependencies=[Depends(require_roles([UserRole.INSTRUCTOR, UserRole.ADMIN]))])
 async def generate_from_context_placeholder():
     """Generate quiz from uploaded document context (RAG/Chunking) placeholder.
 

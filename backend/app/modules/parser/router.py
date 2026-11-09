@@ -1,4 +1,6 @@
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, Depends, File, UploadFile
+from app.core.security import require_roles
+from app.models.entities import UserRole
 
 from app.schemas.common import APIResponse, HealthCheckResponse
 
@@ -14,7 +16,7 @@ def parser_health_check():
     return HealthCheckResponse(service="File Parser Service")
 
 
-@router.post("/upload", response_model=APIResponse[dict])
+@router.post("/upload", response_model=APIResponse[dict], dependencies=[Depends(require_roles([UserRole.INSTRUCTOR, UserRole.ADMIN]))])
 async def upload_document_placeholder(file: UploadFile = File(None)):
     """Upload document placeholder.
 

@@ -6,9 +6,28 @@ export const apiClient = axios.create({
 });
 
 let refreshing: Promise<unknown> | null = null;
+let endingSession = false;
+let logoutRequest: Promise<void> | null = null;
+
+// Finish any refresh before deleting cookies so its response cannot restore them.
+export function logoutSession(): Promise<void> {
+  if (logoutRequest) return logoutRequest;
+  endingSession = true;
+  logoutRequest = (async () => {
+    try {
+      await refreshing?.catch(() => undefined);
+      await apiClient.post("/auth/logout");
+    } finally {
+      endingSession = false;
+      logoutRequest = null;
+    }
+  })();
+  return logoutRequest;
+}
+
 apiClient.interceptors.response.use(response => response, async error => {
   const config = error.config;
-  if (error.response?.status === 401 && config && !config._retried &&
+  if (!endingSession && error.response?.status === 401 && config && !config._retried &&
       !/\/auth\/(login|register|refresh|logout)/.test(config.url || "")) {
     config._retried = true;
     refreshing ||= apiClient.post("/auth/refresh").finally(() => { refreshing = null; });

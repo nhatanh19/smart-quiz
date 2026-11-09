@@ -226,6 +226,7 @@ class Category(Base):
             "name",
             name="created_by_subject_name",
         ),
+        Index("ix_categories_subject_id", "subject_id"),
     )
 
     # Relationships

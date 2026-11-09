@@ -47,7 +47,7 @@ Hệ thống **Smart Quiz** được tổ chức theo mô hình **Standard Monor
 | **CSS Framework** | Tailwind CSS | `^3.4` | Thiết kế giao diện theo mô hình Utility-first CSS, đồng nhất bảng màu, Typography và Responsive. |
 | **UI Component Base** | `shadcn/ui` ecosystem | Latest | Bộ cấu hình UI chuẩn (`components.json`, `index.css` với CSS Variables, `clsx`, `tailwind-merge` và hàm `cn()`). |
 | **Bộ Icon** | `lucide-react` | `^0.350` | Hệ thống biểu tượng giao diện vector chất lượng cao, dung lượng nhẹ. |
-| **HTTP Networking** | Axios | `^1.6` | Client gửi yêu cầu HTTP/REST, cấu hình Base URL linh hoạt và Request Interceptor tự động gắn Bearer JWT Token từ `localStorage`. |
+| **HTTP Networking** | Axios | `^1.6` | Client gửi yêu cầu HTTP/REST với `withCredentials`, dùng JWT trong HttpOnly cookie và Response Interceptor phục hồi phiên qua `/auth/refresh`. Không lưu token trong `localStorage`. |
 
 ---
 
