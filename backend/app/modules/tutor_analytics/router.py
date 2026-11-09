@@ -17,9 +17,11 @@ from app.modules.tutor_analytics.schemas import (
     AITutorExplanationData,
     AITutorExplanationRequest,
     GradingResultSchema,
+    KnowledgeGapDiagnosticResponse,
 )
 from app.modules.tutor_analytics.service import ai_tutor_service
 from app.modules.tutor_analytics.services.grading_service import grade_attempt
+from app.modules.tutor_analytics.services.knowledge_gap_service import diagnose_knowledge_gaps
 from app.modules.tutor_analytics.services.review_service import get_exam_review_data
 from app.schemas.common import APIResponse, HealthCheckResponse
 
@@ -184,6 +186,56 @@ def get_attempt_review(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Lỗi khi tải giao diện xem lại bài thi: {str(exc)}",
+        )
+
+
+# ==============================================================================
+# ISSUE #17: KNOWLEDGE GAP DIAGNOSTIC CARD API (WBS 5.2.2)
+# ==============================================================================
+
+
+@router.get(
+    "/knowledge-gaps/{attempt_id}",
+    response_model=APIResponse[KnowledgeGapDiagnosticResponse],
+)
+def get_knowledge_gap_diagnosis(
+    attempt_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Diagnose student knowledge gaps and provide actionable study advice.
+
+    Fulfills Issue #17 (Acceptance Criteria):
+    - Summarizes incorrect answers by topic/tag.
+    - Explicitly surfaces: "Chủ đề bạn cần củng cố: <Tên chủ đề>"
+    - Proposes at least 2 concrete study suggestions to improve outcomes.
+    """
+    try:
+        data = diagnose_knowledge_gaps(db, attempt_id, current_user=current_user)
+        return APIResponse(
+            success=True,
+            message="Knowledge gap diagnostic generated successfully",
+            data=data,
+        )
+    except NotFoundError as err:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(err),
+        )
+    except PermissionError as err:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(err),
+        )
+    except InvalidAttemptStateError as err:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(err),
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi khi phân tích lỗ hổng kiến thức: {str(exc)}",
         )
 
 
