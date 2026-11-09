@@ -14,6 +14,9 @@ import AiGenPlaceholder from "@/pages/ai-generator/AiGenPlaceholder";
 import ExamPlaceholder from "@/pages/exam/ExamPlaceholder";
 import AnalyticsPlaceholder from "@/pages/tutor-analytics/AnalyticsPlaceholder";
 import ReviewExamView from "@/pages/tutor-analytics/ReviewExamView";
+import ManageExams from "@/pages/exam/ManageExams";
+import JoinExam from "@/pages/exam/JoinExam";
+import ExamLobby from "@/pages/exam/ExamLobby";
 import ProfilePage from "@/pages/auth/ProfilePage";
 import ForbiddenPage from "@/pages/auth/ForbiddenPage";
 import { useAuth } from "@/contexts/AuthContext";
@@ -45,6 +48,8 @@ export const AppRoutes: React.FC = () => {
           <Route path="/" element={<HomeRedirect />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route element={<ProtectedRoute allowedRoles={instructorRoles} />}>
+            <Route path="/instructor/exams" element={<ManageExams />} />
+            <Route path="/instructor/exams/new" element={<ManageExams />} />
             <Route path="/instructor/parser" element={<ParserPlaceholder />} />
             <Route path="/instructor/ai-generator" element={<AiGenPlaceholder />} />
             <Route path="/instructor/analytics" element={<AnalyticsPlaceholder />} />
@@ -57,6 +62,10 @@ export const AppRoutes: React.FC = () => {
             <Route path="/admin/*" element={<p>Không tìm thấy trang quản trị.</p>} />
           </Route>
           <Route path="/forbidden" element={<ForbiddenPage />} />
+          <Route element={<ProtectedRoute allowedRoles={["STUDENT"]} />}>
+            <Route path="/exam/join" element={<JoinExam />} />
+            <Route path="/exam/lobby/:examId" element={<ExamLobby />} />
+          </Route>
           {/* Post-Exam Review Mode Interface (Issue #15, WBS 5.1.2): all authenticated roles; API enforces ownership */}
           <Route path="/review" element={<ReviewExamView />} />
           <Route path="/review/:attemptId" element={<ReviewExamView />} />

@@ -30,6 +30,7 @@ export const MainLayout: React.FC = () => {
           <nav aria-label="Điều hướng chính" className="flex flex-wrap items-center gap-1 sm:gap-2">
             <NavLink to="/profile" className="px-3 py-1.5 text-sm font-medium text-blue-700">Hồ sơ cá nhân</NavLink>
             {manager && <>
+            <NavLink to="/instructor/exams" className="px-3 py-1.5 text-sm font-medium text-blue-700">Ca thi</NavLink>
             <NavLink
               to="/instructor/parser"
               className={({ isActive }) =>
@@ -60,7 +61,7 @@ export const MainLayout: React.FC = () => {
 
             </>}
             <NavLink
-              to="/exam"
+              to={manager ? "/instructor/exams" : "/exam/join"}
               className={({ isActive }) =>
                 `flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                   isActive

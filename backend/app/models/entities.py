@@ -558,6 +558,7 @@ class ExamAttempt(Base):
             "student_id",
             unique=True,
             postgresql_where=text("status = 'IN_PROGRESS'"),
+            sqlite_where=text("status = 'IN_PROGRESS'"),
         ),
         Index("ix_exam_attempts_student_started", "student_id", desc("started_at")),
         Index(

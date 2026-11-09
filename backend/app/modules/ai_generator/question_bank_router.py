@@ -11,6 +11,8 @@ from app.core.database import get_db
 from app.core.security import require_roles
 from app.models.entities import (
     Category,
+    ExamQuestion,
+    ExamAttempt,
     CognitiveLevel,
     Question,
     QuestionLevel,
@@ -220,6 +222,13 @@ def update_question(
 ):
     question = _get_question_or_404(db, question_id, current_user)
     updates = payload.model_dump(exclude_unset=True)
+    if updates:
+        # Same row lock as exam start: source content must stay stable after a snapshot exists.
+        question = db.query(Question).filter(Question.id == question.id).with_for_update().first()
+        used = db.query(ExamAttempt).join(ExamQuestion, ExamQuestion.exam_id == ExamAttempt.exam_id).filter(
+            ExamQuestion.question_id == question.id).first()
+        if used:
+            raise HTTPException(409, "Không thể sửa câu hỏi đã có lượt thi.")
     updated_data = {
         "category_id": question.category_id,
         "content": question.content,
