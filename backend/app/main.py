@@ -1,7 +1,9 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.core.config import settings
+from app.core.llm_client import LLMRateLimitError
 from app.modules.auth.router import router as auth_router
 from app.modules.parser.router import router as parser_router
 from app.modules.ai_generator.router import router as ai_generator_router
@@ -18,6 +20,17 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+
+@app.exception_handler(LLMRateLimitError)
+async def llm_rate_limit_error_handler(
+    _request: Request, error: LLMRateLimitError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        content={"success": False, "error": str(error)},
+    )
+
 
 # Configure CORS Middleware
 if settings.BACKEND_CORS_ORIGINS:
