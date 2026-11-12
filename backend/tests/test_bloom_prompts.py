@@ -277,6 +277,53 @@ def test_validator_rejects_duplicate_and_lazy_distractors_and_bad_correct_counts
     assert bank_payload.cognitive_level == CognitiveLevel.REMEMBER
 
 
+@pytest.mark.parametrize(
+    ("cognitive_level", "expected_level"),
+    [
+        (CognitiveLevel.REMEMBER, QuestionLevel.EASY),
+        (CognitiveLevel.UNDERSTAND, QuestionLevel.MEDIUM),
+        (CognitiveLevel.APPLY, QuestionLevel.HARD),
+    ],
+)
+def test_validator_uses_default_difficulty_when_llm_omits_level(
+    cognitive_level: CognitiveLevel,
+    expected_level: QuestionLevel,
+):
+    question = _valid_single_choice(cognitive_level=cognitive_level)
+    question.level = None
+
+    validated = validate_and_normalize_question(
+        question,
+        expected_cognitive_level=cognitive_level,
+        expected_question_type=QuestionType.SINGLE_CHOICE,
+    )
+
+    assert validated.level == expected_level
+
+
+@pytest.mark.parametrize(
+    ("cognitive_level", "incorrect_level"),
+    [
+        (CognitiveLevel.REMEMBER, QuestionLevel.MEDIUM),
+        (CognitiveLevel.UNDERSTAND, QuestionLevel.HARD),
+        (CognitiveLevel.APPLY, QuestionLevel.EASY),
+    ],
+)
+def test_validator_rejects_difficulty_that_does_not_match_bloom_level(
+    cognitive_level: CognitiveLevel,
+    incorrect_level: QuestionLevel,
+):
+    question = _valid_single_choice(cognitive_level=cognitive_level)
+    question.level = incorrect_level
+
+    with pytest.raises(QuestionValidationError, match="Độ khó không khớp"):
+        validate_and_normalize_question(
+            question,
+            expected_cognitive_level=cognitive_level,
+            expected_question_type=QuestionType.SINGLE_CHOICE,
+        )
+
+
 @pytest.mark.anyio
 async def test_service_repairs_invalid_batch_and_meets_exact_matrix_counts(monkeypatch):
     service = AIQuestionGeneratorService()

@@ -85,6 +85,12 @@ def validate_and_normalize_question(
         raise QuestionValidationError(
             f"Thể loại câu hỏi không khớp: yêu cầu {expected_question_type.value}, nhận được {raw.question_type.value}"
         )
+    expected_level = COGNITIVE_TO_DEFAULT_LEVEL[expected_cognitive_level]
+    if raw.level is not None and raw.level != expected_level:
+        raise QuestionValidationError(
+            f"Độ khó không khớp với mức độ Bloom {expected_cognitive_level.value}: "
+            f"yêu cầu {expected_level.value}, nhận được {raw.level.value}"
+        )
 
     content = WHITESPACE_RE.sub(" ", (raw.content or "")).strip()
     if len(content) < 8:
@@ -181,7 +187,6 @@ def validate_and_normalize_question(
         correct_labels = ", ".join(o.id for o in normalized_options if o.is_correct)
         explanation = f"Đáp án đúng là phương án {correct_labels}."
 
-    level = raw.level or COGNITIVE_TO_DEFAULT_LEVEL[expected_cognitive_level]
     tags = _normalize_tags(raw.tags)
 
     return GeneratedQuestionItem(
@@ -189,7 +194,7 @@ def validate_and_normalize_question(
         content=content,
         question_type=expected_question_type,
         cognitive_level=expected_cognitive_level,
-        level=level,
+        level=expected_level,
         options=normalized_options,
         tags=tags,
         explanation=explanation,
