@@ -114,6 +114,22 @@ def submit(attempt_id: UUID, payload: SubmitInput, response: Response, db: Sessi
         raise
 
 
+@router.get("/attempts/{attempt_id}")
+def attempt_detail(attempt_id: UUID, response: Response, db: Session = Depends(get_db), user: User = Depends(student)):
+    response.headers["Cache-Control"] = "no-store"
+    return APIResponse(data=service.get_attempt(db, attempt_id, user))
+
+
+@router.post("/attempts/{attempt_id}/answers")
+def save_answers(attempt_id: UUID, payload: SubmitInput, response: Response, db: Session = Depends(get_db), user: User = Depends(student), origin=Depends(check_origin)):
+    try:
+        response.headers["Cache-Control"] = "no-store"
+        return APIResponse(data=service.save_answers(db, attempt_id, user, payload))
+    except Exception:
+        db.rollback()
+        raise
+
+
 @router.post("/attempts/{attempt_id}/log-violation", dependencies=[Depends(student)])
 def log_violation_placeholder(attempt_id: UUID):
     raise HTTPException(501, "Anti-cheat sẽ được triển khai trong Sprint 2.")

@@ -136,7 +136,33 @@ def test_expiry_limits_and_time_window(client, db_session, room, monkeypatch):
     assert service.aware(db_session.get(ExamAttempt, UUID(second["attempt_id"])).expires_at) <= datetime.fromisoformat(exam["end_time"])
     monkeypatch.setattr(service, "now", lambda: original + timedelta(hours=2))
     assert start(client, student, exam).status_code == 403
-    assert client.post(PREFIX+f'/attempts/{second["attempt_id"]}/submit', headers=headers(student), json={"answers": []}).status_code == 409
+    response = client.post(PREFIX+f'/attempts/{second["attempt_id"]}/submit', headers=headers(student), json={"answers": []})
+    assert response.status_code == 200
+    assert response.json()["data"]["status"] == "EXPIRED"
+
+
+def test_recovery_saved_answers_and_expiry_cutoff(client, db_session, room, monkeypatch):
+    _, student, _, question, _, exam = room
+    enter(client, student, exam)
+    attempt = start(client, student, exam).json()["data"]
+    path = PREFIX + f'/attempts/{attempt["attempt_id"]}'
+    answer = {"answers": [{"question_id": str(question.id), "selected_options": ["A"]}]}
+    assert client.post(path + "/answers", headers=headers(student), json=answer).status_code == 200
+    recovered = client.get(path, headers=headers(student))
+    assert recovered.status_code == 200
+    assert recovered.json()["data"]["answers"] == {str(question.id): ["A"]}
+    assert "is_correct" not in recovered.text
+    stranger = User(email="recovery-other@example.com", full_name="Other", role=UserRole.STUDENT, password_hash="unused")
+    db_session.add(stranger); db_session.commit()
+    assert client.get(path, headers=headers(stranger)).status_code == 403
+    assert client.post(path + "/answers", headers=headers(stranger), json=answer).status_code == 403
+    monkeypatch.setattr(service, "now", lambda: datetime.fromisoformat(attempt["expires_at"]) + timedelta(seconds=1))
+    wrong = {"answers": [{"question_id": str(question.id), "selected_options": ["B"]}]}
+    assert client.post(path + "/answers", headers=headers(student), json=wrong).status_code == 409
+    result = client.post(path + "/submit", headers=headers(student), json=wrong)
+    assert result.status_code == 200
+    assert result.json()["data"]["score"] == 10
+    assert result.json()["data"]["status"] == "EXPIRED"
 
 
 def test_wrong_owner_and_grant_user_binding(client, db_session, room):

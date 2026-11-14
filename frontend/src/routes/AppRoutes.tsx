@@ -17,6 +17,7 @@ import ReviewExamView from "@/pages/tutor-analytics/ReviewExamView";
 import ManageExams from "@/pages/exam/ManageExams";
 import JoinExam from "@/pages/exam/JoinExam";
 import ExamLobby from "@/pages/exam/ExamLobby";
+import ExamRoom from "@/pages/exam/ExamRoom";
 import ProfilePage from "@/pages/auth/ProfilePage";
 import ForbiddenPage from "@/pages/auth/ForbiddenPage";
 import { useAuth } from "@/contexts/AuthContext";
@@ -72,9 +73,11 @@ export const AppRoutes: React.FC = () => {
         </Route>
 
         {/* 3. Focused Exam Room (Wrapped in Isolated ExamFocusLayout for Module 3) */}
-        <Route element={<ExamFocusLayout />}>
-          <Route path="/exam" element={<ExamPlaceholder />} />
-          <Route path="/exam/:attemptId" element={<ExamPlaceholder />} />
+        <Route element={<ProtectedRoute allowedRoles={["STUDENT"]} />}>
+          <Route element={<ExamFocusLayout />}>
+            <Route path="/exam" element={<ExamPlaceholder />} />
+            <Route path="/exam/:attemptId" element={<ExamRoom />} />
+          </Route>
         </Route>
       </Route>
 

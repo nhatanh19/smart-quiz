@@ -8,6 +8,8 @@ export interface ExamInfo {
 }
 export interface AttemptInfo {
   attempt_id: string; exam_id: string; expires_at: string;
+  status: string;
+  answers?: Record<string, string[]>;
   questions: { question_id: string; content: string; question_type: string; options: { id: string; text: string }[] }[];
 }
 export async function examGet<T>(path: string): Promise<T> {

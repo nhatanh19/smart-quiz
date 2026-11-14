@@ -142,6 +142,18 @@ def start_attempt(db, exam_id, user):
     return data
 
 
+def get_attempt(db, attempt_id, user):
+    attempt = db.query(ExamAttempt).filter(ExamAttempt.id == attempt_id).first()
+    if not attempt:
+        raise HTTPException(404, "Không tìm thấy bài làm.")
+    if attempt.student_id != user.id:
+        raise HTTPException(403, "Bài làm không thuộc tài khoản của bạn.")
+    return {"attempt_id": attempt.id, "exam_id": attempt.exam_id,
+            "expires_at": aware(attempt.expires_at), "status": attempt.status.value,
+            "questions": render_attempt_questions(attempt.question_order_snapshot, rows(db, attempt.exam_id)),
+            "answers": {str(a.question_id): a.selected_options for a in db.query(AttemptAnswer).filter(AttemptAnswer.attempt_id == attempt.id).all()}}
+
+
 def submit_attempt(db, attempt_id: UUID, user, payload: SubmitInput):
     attempt = db.query(ExamAttempt).filter(ExamAttempt.id == attempt_id).with_for_update().first()
     if not attempt:
@@ -150,12 +162,9 @@ def submit_attempt(db, attempt_id: UUID, user, payload: SubmitInput):
         raise HTTPException(403, "Bài làm không thuộc tài khoản của bạn.")
     if attempt.status != AttemptStatus.IN_PROGRESS:
         raise HTTPException(409, "Bài làm đã kết thúc.")
-    if now() >= aware(attempt.expires_at):
-        attempt.status = AttemptStatus.EXPIRED
-        attempt.submitted_at = attempt.expires_at
-        db.commit()
-        raise HTTPException(409, "Đã hết thời gian làm bài.")
-    answers = [item.model_dump() for item in payload.answers]
+    expired = now() >= aware(attempt.expires_at)
+    # After the deadline only answers already saved on the server are eligible.
+    answers = [] if expired else [item.model_dump() for item in payload.answers]
     try:
         validate_attempt_answers(attempt.question_order_snapshot, answers)
     except ValueError as error:
@@ -169,6 +178,33 @@ def submit_attempt(db, attempt_id: UUID, user, payload: SubmitInput):
         else:
             record.selected_options = answer["selected_options"]
     db.flush()
+    if expired:
+        attempt.status = AttemptStatus.EXPIRED
+        attempt.submitted_at = attempt.expires_at
     result = grade_attempt(db, attempt.id)
     db.commit()
     return {**asdict(result), "status": attempt.status.value}
+
+
+def save_answers(db, attempt_id, user, payload):
+    attempt = db.query(ExamAttempt).filter(ExamAttempt.id == attempt_id).with_for_update().first()
+    if not attempt:
+        raise HTTPException(404, "Không tìm thấy bài làm.")
+    if attempt.student_id != user.id:
+        raise HTTPException(403, "Bài làm không thuộc tài khoản của bạn.")
+    if attempt.status != AttemptStatus.IN_PROGRESS or now() >= aware(attempt.expires_at):
+        raise HTTPException(409, "Đã hết thời gian lưu đáp án.")
+    answers = [item.model_dump() for item in payload.answers]
+    try:
+        validate_attempt_answers(attempt.question_order_snapshot, answers)
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from error
+    existing = {a.question_id: a for a in db.query(AttemptAnswer).filter(AttemptAnswer.attempt_id == attempt.id).all()}
+    for answer in answers:
+        record = existing.get(answer["question_id"])
+        if record is None:
+            db.add(AttemptAnswer(attempt_id=attempt.id, **answer))
+        else:
+            record.selected_options = answer["selected_options"]
+    db.commit()
+    return {"saved": True}
