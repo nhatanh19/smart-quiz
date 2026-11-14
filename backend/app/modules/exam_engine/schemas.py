@@ -1,4 +1,5 @@
 from uuid import UUID
+from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, AwareDatetime, field_validator, model_validator
 
 
@@ -56,3 +57,11 @@ class AnswerInput(BaseModel):
 
 class SubmitInput(BaseModel):
     answers: list[AnswerInput] = Field(max_length=500)
+
+
+class ViolationInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    event_type: Literal["TAB_SWITCH", "WINDOW_BLUR", "COPY_PASTE_ATTEMPT", "DEVTOOLS_SHORTCUT"]
+    event_id: UUID
+    metadata_info: dict[str, Any] | None = None
+    answers: list[AnswerInput] | None = Field(default=None, max_length=500)

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.exc import IntegrityError
 
 from app.core.security import get_password_hash
-from app.models.entities import Exam, ExamQuestion, ExamAttempt, AttemptAnswer, AttemptStatus, Question, User, UserRole
+from app.models.entities import Exam, ExamQuestion, ExamAttempt, AttemptAnswer, AttemptStatus, AntiCheatLog, Question, User, UserRole
 from app.modules.exam_engine.schemas import ExamInput, SubmitInput
 from app.modules.exam_engine.shuffle_service import build_attempt_snapshot, render_attempt_questions, validate_attempt_answers
 from app.modules.tutor_analytics.services.grading_service import grade_attempt
@@ -149,6 +149,9 @@ def get_attempt(db, attempt_id, user):
     if attempt.student_id != user.id:
         raise HTTPException(403, "Bài làm không thuộc tài khoản của bạn.")
     return {"attempt_id": attempt.id, "exam_id": attempt.exam_id,
+            "server_now": now(),
+            "violation_count": attempt.violation_count,
+            "max_tab_violations": get_exam(db, attempt.exam_id).max_tab_violations,
             "expires_at": aware(attempt.expires_at), "status": attempt.status.value,
             "questions": render_attempt_questions(attempt.question_order_snapshot, rows(db, attempt.exam_id)),
             "answers": {str(a.question_id): a.selected_options for a in db.query(AttemptAnswer).filter(AttemptAnswer.attempt_id == attempt.id).all()}}
@@ -208,3 +211,58 @@ def save_answers(db, attempt_id, user, payload):
             record.selected_options = answer["selected_options"]
     db.commit()
     return {"saved": True}
+
+
+def log_violation(db, attempt_id, user, payload):
+    # Share the attempt row lock with submit/autosave before reading state/count.
+    attempt = db.query(ExamAttempt).filter(ExamAttempt.id == attempt_id).with_for_update().first()
+    if not attempt:
+        raise HTTPException(404, "Không tìm thấy bài làm.")
+    if attempt.student_id != user.id:
+        raise HTTPException(403, "Bài làm không thuộc tài khoản của bạn.")
+    maximum = get_exam(db, attempt.exam_id).max_tab_violations
+
+    def result():
+        return {"status": attempt.status.value, "violation_count": attempt.violation_count,
+                "max_tab_violations": maximum}
+
+    if attempt.status != AttemptStatus.IN_PROGRESS:
+        return result()
+    duplicate = db.query(AntiCheatLog.id).filter(
+        AntiCheatLog.attempt_id == attempt.id,
+        AntiCheatLog.metadata_info["event_id"].as_string() == str(payload.event_id)).first()
+    if duplicate:
+        return result()
+    timestamp = now()
+    if timestamp >= aware(attempt.expires_at):
+        attempt.status = AttemptStatus.EXPIRED
+        attempt.submitted_at = attempt.expires_at
+        grade_attempt(db, attempt.id)
+        db.commit()
+        return result()
+    counted = payload.event_type != "COPY_PASTE_ATTEMPT"
+    db.add(AntiCheatLog(attempt_id=attempt.id, event_type=payload.event_type,
+        metadata_info={**(payload.metadata_info or {}), "event_id": str(payload.event_id), "counted": counted},
+        logged_at=timestamp))
+    if counted:
+        attempt.violation_count += 1
+    if attempt.violation_count >= maximum:
+        if payload.answers is not None:
+            answers = [item.model_dump() for item in payload.answers]
+            try:
+                validate_attempt_answers(attempt.question_order_snapshot, answers)
+            except ValueError as error:
+                raise HTTPException(400, str(error)) from error
+            existing = {a.question_id: a for a in db.query(AttemptAnswer).filter(AttemptAnswer.attempt_id == attempt.id).all()}
+            for answer in answers:
+                record = existing.get(answer["question_id"])
+                if record is None:
+                    db.add(AttemptAnswer(attempt_id=attempt.id, **answer))
+                else:
+                    record.selected_options = answer["selected_options"]
+        attempt.status = AttemptStatus.LOCKED_VIOLATION
+        attempt.submitted_at = timestamp
+        db.flush()
+        grade_attempt(db, attempt.id)
+    db.commit()
+    return result()
