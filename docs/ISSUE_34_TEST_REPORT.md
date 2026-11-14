@@ -1,5 +1,7 @@
 ﻿# Báo cáo kết quả kiểm thử — Issue #34
 
+> Cập nhật sau: phần đánh dấu, snapshot recovery, đồng hồ server và kết quả test mới nằm trong [ISSUE_34_CHECKLIST_VERIFICATION.md](ISSUE_34_CHECKLIST_VERIFICATION.md). Nội dung bên dưới giữ kết quả của lần triển khai ban đầu.
+
 - Ngày thực hiện: 14/11/2026 (Asia/Saigon).
 - Nhánh: `feature/issue-34-focused-exam-room`.
 - Phạm vi: phòng thi tập trung, countdown, lưu/khôi phục đáp án và tự nộp khi hết giờ.

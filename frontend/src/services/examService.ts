@@ -9,6 +9,9 @@ export interface ExamInfo {
 export interface AttemptInfo {
   attempt_id: string; exam_id: string; expires_at: string;
   status: string;
+  server_now?: string;
+  violation_count: number;
+  max_tab_violations: number;
   answers?: Record<string, string[]>;
   questions: { question_id: string; content: string; question_type: string; options: { id: string; text: string }[] }[];
 }

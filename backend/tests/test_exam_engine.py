@@ -150,6 +150,7 @@ def test_recovery_saved_answers_and_expiry_cutoff(client, db_session, room, monk
     assert client.post(path + "/answers", headers=headers(student), json=answer).status_code == 200
     recovered = client.get(path, headers=headers(student))
     assert recovered.status_code == 200
+    assert datetime.fromisoformat(recovered.json()["data"]["server_now"]).tzinfo is not None
     assert recovered.json()["data"]["answers"] == {str(question.id): ["A"]}
     assert "is_correct" not in recovered.text
     stranger = User(email="recovery-other@example.com", full_name="Other", role=UserRole.STUDENT, password_hash="unused")

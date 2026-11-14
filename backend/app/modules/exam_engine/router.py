@@ -8,7 +8,7 @@ from app.core.security import require_roles, verify_password
 from app.models.entities import User, UserRole, Exam
 from app.schemas.common import APIResponse, HealthCheckResponse
 from app.modules.auth.router import check_origin
-from app.modules.exam_engine.schemas import ExamInput, JoinInput, SubmitInput
+from app.modules.exam_engine.schemas import ExamInput, JoinInput, SubmitInput, ViolationInput
 from app.modules.exam_engine import service
 
 router = APIRouter(prefix="/exam-engine", tags=["Exam Engine"])
@@ -130,6 +130,11 @@ def save_answers(attempt_id: UUID, payload: SubmitInput, response: Response, db:
         raise
 
 
-@router.post("/attempts/{attempt_id}/log-violation", dependencies=[Depends(student)])
-def log_violation_placeholder(attempt_id: UUID):
-    raise HTTPException(501, "Anti-cheat sẽ được triển khai trong Sprint 2.")
+@router.post("/attempts/{attempt_id}/log-violation")
+def log_violation(attempt_id: UUID, payload: ViolationInput, response: Response, db: Session = Depends(get_db), user: User = Depends(student), origin=Depends(check_origin)):
+    try:
+        response.headers["Cache-Control"] = "no-store"
+        return APIResponse(data=service.log_violation(db, attempt_id, user, payload))
+    except Exception:
+        db.rollback()
+        raise
