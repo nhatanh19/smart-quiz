@@ -51,14 +51,12 @@ it("shows join failure and does not navigate", async () => {
   expect(screen.getByRole("heading", { name: "Vào phòng thi" })).toBeTruthy();
 });
 
-it("starts/resumes and submits original option IDs then opens review", async () => {
+it("starts/resumes into the focused exam room", async () => {
   vi.mocked(examPost).mockResolvedValueOnce(attempt).mockResolvedValueOnce({ score: 10 });
-  render(<MemoryRouter initialEntries={["/exam/lobby/exam-id"]}><Routes><Route path="/exam/lobby/:examId" element={<ExamLobby />} /><Route path="/review/:attemptId" element={<p>Kết quả bài thi</p>} /></Routes></MemoryRouter>);
+  render(<MemoryRouter initialEntries={["/exam/lobby/exam-id"]}><Routes><Route path="/exam/lobby/:examId" element={<ExamLobby />} /><Route path="/exam/:attemptId" element={<p>Phòng thi tập trung</p>} /></Routes></MemoryRouter>);
   fireEvent.click(await screen.findByRole("button", { name: "Bắt đầu / Tiếp tục" }));
-  fireEvent.click(await screen.findByLabelText("Phương án B"));
-  fireEvent.click(screen.getByRole("button", { name: "Nộp bài" }));
-  await screen.findByText("Kết quả bài thi");
-  expect(examPost).toHaveBeenLastCalledWith("/attempts/attempt-id/submit", { answers: [{ question_id: "q-id", selected_options: ["B"] }] });
+  await screen.findByText("Phòng thi tập trung");
+  expect(examPost).toHaveBeenCalledWith("/exams/exam-id/start");
 });
 
 it("shows backend start rejection while staying in the lobby", async () => {
