@@ -11,6 +11,7 @@ import AuthPage from "@/pages/auth/AuthPage";
 import ProtectedRoute from "@/routes/ProtectedRoute";
 import ParserPlaceholder from "@/pages/parser/ParserPlaceholder";
 import AiGenPlaceholder from "@/pages/ai-generator/AiGenPlaceholder";
+import AiGenPage from "@/pages/ai-generator/AiGenPage";
 import ExamPlaceholder from "@/pages/exam/ExamPlaceholder";
 import AnalyticsPlaceholder from "@/pages/tutor-analytics/AnalyticsPlaceholder";
 import ReviewExamView from "@/pages/tutor-analytics/ReviewExamView";
@@ -52,7 +53,7 @@ export const AppRoutes: React.FC = () => {
             <Route path="/instructor/exams" element={<ManageExams />} />
             <Route path="/instructor/exams/new" element={<ManageExams />} />
             <Route path="/instructor/parser" element={<ParserPlaceholder />} />
-            <Route path="/instructor/ai-generator" element={<AiGenPlaceholder />} />
+            <Route path="/instructor/ai-generator" element={<AiGenPage />} />
             <Route path="/instructor/analytics" element={<AnalyticsPlaceholder />} />
             <Route path="/instructor/*" element={<p>Không tìm thấy trang quản lý.</p>} />
             <Route path="/parser" element={<Navigate to="/instructor/parser" replace />} />
