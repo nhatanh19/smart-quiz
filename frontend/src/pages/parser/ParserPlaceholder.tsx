@@ -511,7 +511,9 @@ export const ParserPlaceholder: React.FC = () => {
       </div>
 
       {activeTab === "parser" ? (
-        <DocumentParserTab />
+        <DocumentParserTab
+          onQuestionsSaved={() => setQuestionRevision((revision) => revision + 1)}
+        />
       ) : (
         <>
           <section className="overflow-hidden rounded-2xl bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 p-6 text-white shadow-lg sm:p-8">
