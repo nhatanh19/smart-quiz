@@ -1,4 +1,5 @@
 import axios from "axios";
+import { apiClient as api } from "@/lib/apiClient";
 import type {
   ApiResponse,
   Category,
@@ -10,20 +11,7 @@ import type {
   Subject,
 } from "@/types";
 
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api/v1",
-});
-
 const questionBankPath = "/ai-generator/question-bank";
-
-api.interceptors.request.use((config) => {
-  const token =
-    localStorage.getItem("access_token") || localStorage.getItem("token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
 
 export interface QuestionListParams {
   skip: number;

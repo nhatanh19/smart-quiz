@@ -256,6 +256,7 @@ export const DocumentParserTab: React.FC = () => {
             accept=".pdf,.docx,.txt"
             className="hidden"
             id="document-upload-input"
+            aria-label="Chọn tệp tài liệu tải lên"
           />
 
           {/* Drag & Drop Zone */}

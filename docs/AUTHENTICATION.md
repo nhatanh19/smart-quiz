@@ -28,14 +28,14 @@ Refresh tokens are stateless. A renewed token does not revoke the previous one; 
 
 ## Scope and follow-up work
 
-This change implements authentication, session recovery, and STUDENT/INSTRUCTOR role selection and persistence. Existing role-checking helpers are available, but business routes do not enforce roles yet. Role enforcement and ownership checks belong to Issue #4. `/me` provides public user data; there is no dedicated Profile page.
+Authentication, session recovery, and STUDENT/INSTRUCTOR role selection and persistence are implemented. Issue #4 adds role-protected frontend routes, a read-only `/profile`, and business API authorization. See [ISSUE_4_HANDOFF.md](./ISSUE_4_HANDOFF.md) for the access matrix, scope, and validation.
 
 Follow-up backlog:
 - Add login rate limits by IP and normalized email with temporary throttling.
 - Persist refresh sessions, rotate tokens once, detect reuse, and revoke sessions on logout.
 - Run the optional PostgreSQL migration, authentication, native enum, and JSONB tests in CI. These tests now run locally with AUTH_TEST_DATABASE_URL; the repository still needs a CI workflow and PostgreSQL service.
 
-Suggested PR description: "Implement registration and login with bcrypt password hashing, HttpOnly access/refresh cookies, session recovery, logout, and shared frontend auth state. Support STUDENT/INSTRUCTOR role selection and persistence; business-route authorization remains in Issue #4."
+Issue #3 delivered registration/login and shared cookie-based auth state. Issue #4 builds on these helpers rather than introducing a second authentication mechanism.
 
 ## Validation
 

@@ -14,27 +14,19 @@ export interface DocumentParseResult {
 
 /**
  * Upload a document (.pdf, .docx, .txt) and extract its raw text content.
- * Sends multipart/form-data to POST /parser/upload via apiClient.
+ * Sends multipart/form-data to POST /parser/upload via shared apiClient (HttpOnly cookies).
  */
 export async function uploadAndExtractDocument(
   file: File,
-  onUploadProgress?: (progressEvent: any) => void,
+  onUploadProgress?: (progressEvent: AxiosProgressEvent) => void,
 ): Promise<DocumentParseResult> {
   const formData = new FormData();
   formData.append("file", file);
-
-  const token =
-    localStorage.getItem("access_token") || localStorage.getItem("token");
-  const headers: Record<string, string> = {};
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
 
   const response = await apiClient.post<ApiResponse<DocumentParseResult>>(
     "/parser/upload",
     formData,
     {
-      headers,
       onUploadProgress,
     },
   );
@@ -46,8 +38,8 @@ export async function uploadAndExtractDocument(
 
   const rawText =
     payload.raw_text ??
-    (payload as any)?.extracted_text ??
-    (payload as any)?.text ??
+    (payload as unknown as Record<string, string | undefined>)?.extracted_text ??
+    (payload as unknown as Record<string, string | undefined>)?.text ??
     "";
 
   return {
@@ -79,7 +71,7 @@ export function extractUploadErrorMessage(error: unknown): string {
       }
       if (Array.isArray(data.detail)) {
         return data.detail
-          .map((item: any) => item.msg || item.message || JSON.stringify(item))
+          .map((item: { msg?: string; message?: string }) => item.msg || item.message || JSON.stringify(item))
           .filter(Boolean)
           .join(", ");
       }

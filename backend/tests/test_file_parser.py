@@ -18,8 +18,12 @@ import pytest
 import pymupdf
 import docx
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
+from app.core.database import get_db
+from app.core.security import create_access_token
 from app.main import app
+from app.models.entities import User, UserRole
 from app.modules.parser.services.file_parser_service import (
     DocumentParserService,
     FileParserService,
@@ -103,10 +107,50 @@ def make_txt_bytes(content: str, encoding: str = "utf-8", bom: bool = False) -> 
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="module")
-def client() -> TestClient:
-    """Shared FastAPI TestClient for HTTP E2E tests."""
-    return TestClient(app)
+@pytest.fixture
+def db_session(auth_engine):
+    """Transactional database session rolled back after each test."""
+    with auth_engine.connect() as connection:
+        transaction = connection.begin()
+        if connection.dialect.name == "sqlite":
+            connection.exec_driver_sql("BEGIN")
+        try:
+            with Session(bind=connection, join_transaction_mode="create_savepoint") as db:
+                app.dependency_overrides[get_db] = lambda: db
+                yield db
+        finally:
+            app.dependency_overrides.clear()
+            transaction.rollback()
+
+
+def _create_user_client(db_session: Session, role: UserRole, email: str) -> TestClient:
+    """Create a TestClient authenticated via HttpOnly access_token cookie for the given role."""
+    user = User(
+        email=email,
+        full_name=f"Parser {role.value}",
+        password_hash="unused-in-test",
+        role=role,
+    )
+    db_session.add(user)
+    db_session.flush()
+    token = create_access_token({"sub": str(user.id), "role": role.value})
+    test_client = TestClient(app)
+    test_client.cookies.set("access_token", token)
+    return test_client
+
+
+@pytest.fixture
+def anon_client(db_session: Session):
+    """Unauthenticated FastAPI TestClient."""
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+@pytest.fixture
+def client(db_session: Session):
+    """Authenticated INSTRUCTOR FastAPI TestClient for HTTP E2E parser tests."""
+    with _create_user_client(db_session, UserRole.INSTRUCTOR, "parser_instructor@example.com") as test_client:
+        yield test_client
 
 
 VIETNAMESE_SAMPLE_TEXT = (
@@ -777,3 +821,67 @@ class TestTier4RealWorldScenarios:
         assert data["word_count"] == len(sample.split())
         assert data["word_count"] == 10
         assert data["character_count"] == 41
+
+
+# ===========================================================================
+# Tier 5: Authentication, RBAC & Same-Site Origin Security (Issue #4 + #5)
+# ===========================================================================
+
+
+class TestTier5AuthAndSecurity:
+    """Verify RBAC and same-site origin protections on parser endpoints."""
+
+    def test_health_check_remains_public(self, anon_client: TestClient) -> None:
+        """Health check endpoint must remain accessible without authentication."""
+        response = anon_client.get("/api/v1/parser/health")
+        assert response.status_code == 200
+        assert response.json().get("status") == "healthy"
+
+    def test_upload_requires_authentication(self, anon_client: TestClient) -> None:
+        """Unauthenticated requests to /parser/upload must be rejected with HTTP 401."""
+        response = anon_client.post(
+            "/api/v1/parser/upload",
+            files={"file": ("unauth.txt", b"Hello", "text/plain")},
+        )
+        assert response.status_code == 401
+
+    def test_upload_forbidden_for_student(self, db_session: Session) -> None:
+        """STUDENT role must be rejected with HTTP 403 Forbidden."""
+        with _create_user_client(
+            db_session, UserRole.STUDENT, "parser_student@example.com"
+        ) as student_client:
+            response = student_client.post(
+                "/api/v1/parser/upload",
+                files={"file": ("student.txt", b"Hello", "text/plain")},
+            )
+            assert response.status_code == 403
+
+    def test_upload_allowed_for_admin(self, db_session: Session) -> None:
+        """ADMIN role must be allowed to upload and parse documents."""
+        with _create_user_client(
+            db_session, UserRole.ADMIN, "parser_admin@example.com"
+        ) as admin_client:
+            response = admin_client.post(
+                "/api/v1/parser/upload",
+                files={"file": ("admin.txt", b"Xin ch\xc3\xa0o Admin", "text/plain")},
+            )
+            assert response.status_code == 200
+            assert response.json()["data"]["raw_text"] == "Xin chào Admin"
+
+    def test_upload_rejects_disallowed_origin_and_cross_site(
+        self, client: TestClient
+    ) -> None:
+        """Mutating upload endpoint rejects unapproved Origin and cross-site fetches."""
+        bad_origin = client.post(
+            "/api/v1/parser/upload",
+            headers={"Origin": "https://evil.example"},
+            files={"file": ("origin.txt", b"Hello", "text/plain")},
+        )
+        assert bad_origin.status_code == 403
+
+        cross_site = client.post(
+            "/api/v1/parser/upload",
+            headers={"sec-fetch-site": "cross-site"},
+            files={"file": ("cross.txt", b"Hello", "text/plain")},
+        )
+        assert cross_site.status_code == 403

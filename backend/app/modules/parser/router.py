@@ -2,10 +2,11 @@
 
 import logging
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
-from app.schemas.common import APIResponse, HealthCheckResponse
-from app.modules.parser.schemas import DocumentParseResult
+from app.core.security import require_roles
+from app.models.entities import UserRole
+from app.modules.auth.router import check_origin
 from app.modules.parser.exceptions import (
     CorruptedFileError,
     DocumentParserError,
@@ -13,7 +14,9 @@ from app.modules.parser.exceptions import (
     FileSizeLimitExceededError,
     UnsupportedFileTypeError,
 )
+from app.modules.parser.schemas import DocumentParseResult
 from app.modules.parser.services.file_parser_service import DocumentParserService
+from app.schemas.common import APIResponse, HealthCheckResponse
 
 logger = logging.getLogger(__name__)
 
@@ -47,10 +50,15 @@ def parser_health_check() -> HealthCheckResponse:
 @router.post(
     "/upload",
     response_model=APIResponse[DocumentParseResult],
+    dependencies=[
+        Depends(require_roles([UserRole.INSTRUCTOR, UserRole.ADMIN])),
+        Depends(check_origin),
+    ],
     summary="Upload and parse document (PDF, DOCX, TXT)",
     description=(
         "Upload a .pdf, .docx, or .txt file up to 10MB to extract raw text with "
-        "full UTF-8 Vietnamese preservation and word/character statistics."
+        "full UTF-8 Vietnamese preservation and word/character statistics. "
+        "Restricted to INSTRUCTOR and ADMIN roles."
     ),
 )
 async def upload_document(
@@ -71,7 +79,10 @@ async def upload_document(
     if not extension:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported file format for '{filename}'. Missing file extension. Allowed extensions are: .pdf, .docx, .txt.",
+            detail=(
+                f"Unsupported file format for '{filename}'. Missing file extension. "
+                "Allowed extensions are: .pdf, .docx, .txt."
+            ),
         )
 
     if extension not in ALLOWED_EXTENSIONS:
@@ -140,8 +151,8 @@ async def upload_document(
     except Exception as err:
         logger.exception("Unexpected error processing uploaded file '%s': %s", filename, err)
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unable to process uploaded file: {str(err)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal error while processing uploaded file.",
         ) from err
 
     return APIResponse(

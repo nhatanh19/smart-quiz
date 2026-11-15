@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useRef, useState, ReactNode } from "react";
 import axios from "axios";
-import { apiClient, authError } from "@/lib/apiClient";
+import { apiClient, authError, logoutSession } from "@/lib/apiClient";
 import { ApiResponse, User } from "@/types";
 
 interface AuthState {
@@ -48,7 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    await apiClient.post("/auth/logout");
+    await logoutSession();
     revision.current += 1;
     checked.current = true;
     setState({ user: null, loading: false, error: "" });
