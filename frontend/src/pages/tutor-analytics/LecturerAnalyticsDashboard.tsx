@@ -129,7 +129,7 @@ export const LecturerAnalyticsDashboard: React.FC<LecturerAnalyticsDashboardProp
               Phân tích Phổ điểm & Kết quả Đề thi
             </h2>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
-              Dành cho Giảng viên (Issue #36)
+              Dành cho Giảng viên
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1">

@@ -21,16 +21,12 @@ export const MainLayout: React.FC = () => {
           <Link to="/" className="flex items-center gap-2 font-bold text-xl text-primary">
             <span className="text-2xl">🧠</span>
             <span>Smart Quiz</span>
-            <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium ml-1">
-              Boilerplate
-            </span>
           </Link>
 
           {/* Module Navigation Links */}
           <nav aria-label="Điều hướng chính" className="flex flex-wrap items-center gap-1 sm:gap-2">
             <NavLink to="/profile" className="px-3 py-1.5 text-sm font-medium text-blue-700">Hồ sơ cá nhân</NavLink>
             {manager && <>
-            <NavLink to="/instructor/exams" className="px-3 py-1.5 text-sm font-medium text-blue-700">Ca thi</NavLink>
             <NavLink
               to="/instructor/parser"
               className={({ isActive }) =>
@@ -105,7 +101,7 @@ export const MainLayout: React.FC = () => {
 
       {/* Footer Note */}
       <footer className="border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-500">
-        Smart Quiz Boilerplate Platform • Quản trị Dự án Phần mềm
+        Smart Quiz Platform • Quản trị Dự án Phần mềm
       </footer>
     </div>
   );

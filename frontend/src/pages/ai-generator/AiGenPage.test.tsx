@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { AxiosError, AxiosResponse, InternalAxiosRequestConfig } from "axios";
 import { apiClient } from "@/lib/apiClient";
 import AiGenPage from "./AiGenPage";
 
@@ -355,5 +356,60 @@ describe("AiGenPage — Generate & Review Step", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /Chọn tất cả/ })).toBeTruthy();
     });
+  });
+
+  it("requires at least 2 characters for topic and surfaces backend detail from AxiosError", async () => {
+    const { generateByMatrix } = await import("@/services/aiGeneratorApi");
+    vi.mocked(generateByMatrix).mockRejectedValueOnce(
+      new AxiosError(
+        "Request failed with status code 503",
+        "ERR_BAD_RESPONSE",
+        {} as InternalAxiosRequestConfig,
+        undefined,
+        {
+          data: { detail: "Dịch vụ AI chưa được cấu hình API Key hợp lệ." },
+          status: 503,
+          statusText: "Service Unavailable",
+          headers: {},
+          config: {} as InternalAxiosRequestConfig,
+        } as AxiosResponse,
+      ),
+    );
+
+    render(<AiGenPage />);
+    const topicInput = screen.getByPlaceholderText(/VD: Lập trình hướng đối tượng/);
+    const generateBtn = screen.getByRole("button", { name: /Sinh câu hỏi bằng AI/ }) as HTMLButtonElement;
+
+    fireEvent.change(topicInput, { target: { value: "A" } });
+    expect(generateBtn.disabled).toBe(true);
+    expect(screen.getByText("Chủ đề cần tối thiểu 2 ký tự.")).toBeTruthy();
+
+    fireEvent.change(topicInput, { target: { value: "AI" } });
+    expect(generateBtn.disabled).toBe(false);
+    fireEvent.click(generateBtn);
+
+    await screen.findByText("Dịch vụ AI chưa được cấu hình API Key hợp lệ.");
+  });
+
+  it("displays taxonomy load errors inside review step instead of bouncing error state", async () => {
+    const { listSubjects } = await import("@/services/questionBankApi");
+    vi.mocked(listSubjects).mockRejectedValueOnce(
+      new AxiosError(
+        "Request failed with status code 500",
+        "ERR_BAD_RESPONSE",
+        {} as InternalAxiosRequestConfig,
+        undefined,
+        {
+          data: { detail: "Không thể tải danh sách môn học." },
+          status: 500,
+          statusText: "Internal Server Error",
+          headers: {},
+          config: {} as InternalAxiosRequestConfig,
+        } as AxiosResponse,
+      ),
+    );
+
+    await renderAndGenerate();
+    await screen.findByText("Không thể tải danh sách môn học.");
   });
 });

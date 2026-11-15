@@ -10,7 +10,6 @@ import ExamFocusLayout from "@/layouts/ExamFocusLayout";
 import AuthPage from "@/pages/auth/AuthPage";
 import ProtectedRoute from "@/routes/ProtectedRoute";
 import ParserPlaceholder from "@/pages/parser/ParserPlaceholder";
-import AiGenPlaceholder from "@/pages/ai-generator/AiGenPlaceholder";
 import AiGenPage from "@/pages/ai-generator/AiGenPage";
 import ExamPlaceholder from "@/pages/exam/ExamPlaceholder";
 import AnalyticsPlaceholder from "@/pages/tutor-analytics/AnalyticsPlaceholder";

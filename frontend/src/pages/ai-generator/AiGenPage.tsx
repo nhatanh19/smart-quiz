@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef } from "react";
+import axios from "axios";
 import {
   Sparkles,
   Settings2,
@@ -71,6 +72,20 @@ const LEVEL_LABELS: Record<string, string> = {
 };
 
 function extractError(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    const detail = error.response?.data?.detail;
+    if (typeof detail === "string" && detail.trim()) return detail;
+    if (Array.isArray(detail)) {
+      const messages = detail
+        .map((item) => (typeof item === "object" && item && "msg" in item ? String(item.msg) : ""))
+        .filter(Boolean);
+      if (messages.length > 0) return messages.join(", ");
+    }
+    if (!error.response) {
+      return "Không thể kết nối tới máy chủ. Vui lòng thử lại.";
+    }
+    return error.message || "Không thể xử lý yêu cầu. Vui lòng thử lại.";
+  }
   if (error instanceof Error) return error.message;
   return "Đã xảy ra lỗi không xác định.";
 }
@@ -332,7 +347,7 @@ export const AiGenPage: React.FC = () => {
   }), [topic, totalQuestions, bloomRatios, typeRatios]);
 
   const canSubmitMatrix =
-    topic.trim().length > 0 &&
+    topic.trim().length >= 2 &&
     totalQuestions >= 1 &&
     bloomSum === 100 &&
     typeSum === 100;
@@ -384,8 +399,13 @@ export const AiGenPage: React.FC = () => {
       }));
       setQuestions(local);
       setSelectedIds(new Set(local.map((q) => q._localId)));
+      setSaveError(null);
       setStep("review");
-      await initSubjectCategories();
+      try {
+        await initSubjectCategories();
+      } catch (catErr) {
+        setSaveError(extractError(catErr));
+      }
     } catch (err) {
       setGenError(extractError(err));
     } finally {
@@ -442,8 +462,13 @@ export const AiGenPage: React.FC = () => {
       }));
       setQuestions(local);
       setSelectedIds(new Set(local.map((q) => q._localId)));
+      setSaveError(null);
       setStep("review");
-      await initSubjectCategories();
+      try {
+        await initSubjectCategories();
+      } catch (catErr) {
+        setSaveError(extractError(catErr));
+      }
     } catch (err) {
       setGenError(extractError(err));
     } finally {
@@ -454,10 +479,15 @@ export const AiGenPage: React.FC = () => {
   const handleSubjectChange = async (subjectId: string) => {
     setSelectedSubjectId(subjectId);
     setSelectedCategoryId("");
-    const cats = await listCategories();
-    const filtered = cats.filter((c) => c.subject_id === subjectId);
-    setCategories(filtered);
-    if (filtered.length > 0) setSelectedCategoryId(filtered[0].id);
+    setSaveError(null);
+    try {
+      const cats = await listCategories();
+      const filtered = cats.filter((c) => c.subject_id === subjectId);
+      setCategories(filtered);
+      if (filtered.length > 0) setSelectedCategoryId(filtered[0].id);
+    } catch (err) {
+      setSaveError(extractError(err));
+    }
   };
 
   const handleEditQuestion = (localId: number, field: string, value: unknown) => {
@@ -587,6 +617,9 @@ export const AiGenPage: React.FC = () => {
                   placeholder="VD: Lập trình hướng đối tượng trong Python"
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
                 />
+                {topic.trim().length === 1 && (
+                  <p className="text-xs text-amber-600">Chủ đề cần tối thiểu 2 ký tự.</p>
+                )}
               </div>
 
               {/* Total questions */}

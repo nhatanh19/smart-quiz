@@ -92,7 +92,7 @@ function getErrorMessage(error: unknown): string {
         .join(", ");
     }
     if (error.response?.status === 401) {
-      return "Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Hãy nhập JWT giảng viên/quản trị viên.";
+      return "Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại bằng tài khoản giảng viên hoặc quản trị viên.";
     }
     if (error.response?.status === 403) {
       return "Tài khoản hiện tại không có quyền quản lý ngân hàng câu hỏi.";
@@ -145,8 +145,6 @@ export const ParserPlaceholder: React.FC = () => {
   const [topicDescription, setTopicDescription] = useState("");
   const [topicSubjectId, setTopicSubjectId] = useState("");
   const [legacySubjectIds, setLegacySubjectIds] = useState<Record<string, string>>({});
-  const [tokenDraft, setTokenDraft] = useState("");
-  const [hasToken, setHasToken] = useState(false);
 
   const categoryById = useMemo(
     () => new Map(categories.map((category) => [category.id, category])),
@@ -183,12 +181,6 @@ export const ParserPlaceholder: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const token = localStorage.getItem("access_token") || localStorage.getItem("token");
-    setHasToken(Boolean(token));
-    if (!token) {
-      setLoadingTaxonomy(false);
-      return;
-    }
     void loadClassifications()
       .catch((loadError: unknown) => setError(getErrorMessage(loadError)))
       .finally(() => setLoadingTaxonomy(false));
@@ -201,12 +193,6 @@ export const ParserPlaceholder: React.FC = () => {
 
   useEffect(() => {
     const controller = new AbortController();
-    if (!hasToken) {
-      setQuestions([]);
-      setHasMore(false);
-      setLoadingQuestions(false);
-      return () => controller.abort();
-    }
     setLoadingQuestions(true);
     setError("");
 
@@ -244,7 +230,7 @@ export const ParserPlaceholder: React.FC = () => {
       });
 
     return () => controller.abort();
-  }, [categoryFilter, cognitiveLevelFilter, debouncedSearch, hasToken, levelFilter, page, questionRevision, subjectFilter, tagFilter]);
+  }, [categoryFilter, cognitiveLevelFilter, debouncedSearch, levelFilter, page, questionRevision, subjectFilter, tagFilter]);
 
   const resetPage = () => setPage(0);
 
@@ -448,28 +434,6 @@ export const ParserPlaceholder: React.FC = () => {
     }
   };
 
-  const saveToken = () => {
-    const token = tokenDraft.trim().replace(/^Bearer\s+/i, "");
-    if (!token) {
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("token");
-      setHasToken(false);
-      setTokenDraft("");
-      setError("Đã xóa JWT đang lưu trong trình duyệt.");
-      return;
-    }
-    localStorage.setItem("access_token", token);
-    setHasToken(true);
-    setTokenDraft("");
-    setError("");
-    setNotice("Đã lưu JWT trong localStorage của trình duyệt.");
-    setLoadingTaxonomy(true);
-    void loadClassifications()
-      .catch((loadError: unknown) => setError(getErrorMessage(loadError)))
-      .finally(() => setLoadingTaxonomy(false));
-    resetPage();
-  };
-
   const clearFilters = () => {
     setSearch("");
     setSubjectFilter("");
@@ -561,53 +525,6 @@ export const ParserPlaceholder: React.FC = () => {
           </span>
         </div>
       </section>
-
-      {!hasToken && (
-        <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
-            <div className="min-w-0 flex-1">
-              <h2 className="font-semibold text-amber-950">Cần JWT giảng viên hoặc quản trị viên</h2>
-              <p className="mt-1 text-sm leading-6 text-amber-900">
-                Backend bảo vệ các API ngân hàng câu hỏi. Dán access token để kết nối. Token được lưu
-                trong localStorage của trình duyệt này.
-              </p>
-              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                <input
-                  type="password"
-                  value={tokenDraft}
-                  onChange={(event) => setTokenDraft(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") saveToken();
-                  }}
-                  placeholder="JWT access token"
-                  aria-label="JWT access token"
-                  className="min-w-0 flex-1 rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
-                />
-                <button
-                  type="button"
-                  onClick={saveToken}
-                  className="rounded-lg bg-amber-800 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-900"
-                >
-                  Kết nối API
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {hasToken && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
-          <span className="inline-flex items-center gap-2">
-            <Check className="h-4 w-4 text-emerald-600" />
-            Đang gửi JWT khi gọi API
-          </span>
-          <button type="button" onClick={saveToken} className="text-xs font-medium text-slate-500 hover:text-red-700">
-            Xóa JWT khỏi trình duyệt
-          </button>
-        </div>
-      )}
 
       {error && (
         <div role="alert" className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
@@ -860,7 +777,7 @@ export const ParserPlaceholder: React.FC = () => {
 
               <div className="flex flex-col-reverse justify-end gap-2 border-t border-slate-100 p-4 sm:flex-row sm:p-5">
                 <button type="button" onClick={closeEditor} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50">Hủy</button>
-                <button type="submit" disabled={saving || loadingTaxonomy || !hasToken} className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50">
+                <button type="submit" disabled={saving || loadingTaxonomy} className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50">
                   {saving && <LoaderCircle className="h-4 w-4 animate-spin" />}
                   {editor ? "Lưu thay đổi" : "Tạo câu hỏi"}
                 </button>

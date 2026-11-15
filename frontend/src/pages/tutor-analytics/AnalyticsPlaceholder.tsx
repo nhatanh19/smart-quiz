@@ -45,12 +45,9 @@ export const AnalyticsPlaceholder: React.FC = () => {
               <h1 className="text-xl font-bold text-slate-800">
                 Bảng điều khiển Phân tích & Đánh giá Hiệu quả
               </h1>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
-                Issue #36 (WBS 5.3)
-              </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Phụ trách: <strong>Dev 4 (Mai Văn Tỉnh - Data & Tutor Engineer)</strong> • Vai trò:{" "}
+              Theo dõi phổ điểm, tiến độ học tập và chẩn đoán lỗ hổng kiến thức • Vai trò:{" "}
               <strong className="text-slate-700">{user?.role || "GUEST"}</strong>
             </p>
           </div>

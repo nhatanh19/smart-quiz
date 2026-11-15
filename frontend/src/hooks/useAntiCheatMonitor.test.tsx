@@ -92,3 +92,24 @@ it("removes listeners on unmount and stays disabled outside an active attempt", 
   render(<Harness enabled={false} />); fireEvent.blur(window);
   expect(examPost).not.toHaveBeenCalled();
 });
+
+it("ignores blur and visibilitychange emitted during beforeunload/pagehide reload", () => {
+  vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+  render(<Harness />);
+  act(() => {
+    fireEvent(window, new Event("beforeunload"));
+    fireEvent.blur(window);
+    fireEvent(document, new Event("visibilitychange"));
+  });
+  expect(examPost).not.toHaveBeenCalled();
+  expect(screen.queryByText("Warning")).toBeNull();
+});
+
+it("ignores blur after pagehide without logging violations", () => {
+  render(<Harness />);
+  act(() => {
+    fireEvent(window, new Event("pagehide"));
+    fireEvent.blur(window);
+  });
+  expect(examPost).not.toHaveBeenCalled();
+});
