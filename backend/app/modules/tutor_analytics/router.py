@@ -1,8 +1,10 @@
+import csv
 from dataclasses import asdict
-from typing import Any, Dict, Optional
+import io
+from typing import Any, Dict, List, Optional
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -14,12 +16,20 @@ from app.modules.tutor_analytics.exceptions import (
     SnapshotMismatchError,
 )
 from app.modules.tutor_analytics.schemas import (
+    AccessibleExamItemSchema,
     AITutorExplanationData,
     AITutorExplanationRequest,
+    ExamAnalyticsResponseSchema,
     GradingResultSchema,
+    StudentAnalyticsResponseSchema,
     KnowledgeGapDiagnosticResponse,
 )
 from app.modules.tutor_analytics.service import ai_tutor_service
+from app.modules.tutor_analytics.services.analytics_service import (
+    get_exam_distribution_analytics,
+    get_student_learning_analytics,
+    list_accessible_exams_for_instructor,
+)
 from app.modules.tutor_analytics.services.grading_service import grade_attempt
 from app.modules.tutor_analytics.services.knowledge_gap_service import diagnose_knowledge_gaps
 from app.modules.tutor_analytics.services.review_service import get_exam_review_data
@@ -239,6 +249,7 @@ def get_attempt_review(
 
 
 # ==============================================================================
+# ==============================================================================
 # ISSUE #17: KNOWLEDGE GAP DIAGNOSTIC CARD API (WBS 5.2.2)
 # ==============================================================================
 
@@ -289,36 +300,202 @@ def get_knowledge_gap_diagnosis(
 
 
 # ==============================================================================
-# PLACEHOLDER ENDPOINTS FOR REMAINING TASKS (ISSUES 27, 28)
+# ISSUE #36: LEARNING ANALYTICS & SCORE DISTRIBUTION DASHBOARD (WBS 5.3)
 # ==============================================================================
 
 
-@router.get("/analytics/student/{student_id}", response_model=APIResponse[dict])
-def get_student_analytics_placeholder(student_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    """Student performance analytics dashboard placeholder.
-
-    // TODO: Dev 4 - Calculate progress trends, accuracy percentage by topic/category,
-    // and identify knowledge gaps.
-    """
-    if user.role != UserRole.ADMIN and student_id != user.id:
-        raise HTTPException(403, "Bạn không có quyền xem thống kê của người dùng này.")
+@router.get(
+    "/analytics/instructor/exams",
+    response_model=APIResponse[List[AccessibleExamItemSchema]],
+    dependencies=[Depends(require_roles([UserRole.INSTRUCTOR, UserRole.ADMIN]))],
+)
+def get_instructor_accessible_exams(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Retrieve list of exams managed by current instructor/admin for the dashboard dropdown selector."""
+    exams = list_accessible_exams_for_instructor(db, current_user)
     return APIResponse(
         success=True,
-        message="// TODO: Dev 4 - Implement Student Learning Analytics logic",
-        data={"student_id": str(student_id), "trends": [], "weak_topics": []},
+        message="Danh sách đề thi được quản lý tải thành công.",
+        data=exams,
     )
 
 
-@router.get("/analytics/exam/{exam_id}", response_model=APIResponse[dict])
-def get_exam_analytics_placeholder(exam_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(require_roles([UserRole.INSTRUCTOR, UserRole.ADMIN]))):
-    """Instructor exam distribution analytics placeholder.
+@router.get(
+    "/analytics/student/{student_id}",
+    response_model=APIResponse[StudentAnalyticsResponseSchema],
+)
+def get_student_learning_analytics_endpoint(
+    student_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Student performance analytics dashboard (Issue #36 / WBS 5.3.1).
 
-    // TODO: Dev 4 - Compute score distribution histogram, question difficulty
-    // breakdown, and high-frequency incorrect answers.
+    RBAC & Ownership:
+    - STUDENT: Only permitted to view their own analytics.
+    - INSTRUCTOR / ADMIN: Permitted to view analytics for any student.
+    Calculates progress trends, accuracy percentage by topic/category,
+    and identifies knowledge gaps.
     """
-    authorize_exam(db, exam_id, user)
-    return APIResponse(
-        success=True,
-        message="// TODO: Dev 4 - Implement Instructor Exam Analytics logic",
-        data={"exam_id": str(exam_id), "score_distribution": {}, "difficult_questions": []},
+    try:
+        if student_id == "me":
+            target_uuid = current_user.id
+        else:
+            target_uuid = uuid.UUID(student_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"student_id '{student_id}' không phải định dạng UUID hợp lệ.",
+        )
+
+    try:
+        data = get_student_learning_analytics(db, target_uuid, current_user=current_user)
+        return APIResponse(
+            success=True,
+            message="Dữ liệu thống kê tiến độ học tập của sinh viên tải thành công.",
+            data=data,
+        )
+    except NotFoundError as err:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(err),
+        )
+    except PermissionError as err:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(err),
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi khi tính toán phân tích học tập sinh viên: {str(exc)}",
+        )
+
+
+@router.get(
+    "/analytics/exam/{exam_id}",
+    response_model=APIResponse[ExamAnalyticsResponseSchema],
+)
+def get_exam_distribution_analytics_endpoint(
+    exam_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Instructor exam distribution analytics (Issue #36 / WBS 5.3.2).
+
+    RBAC & Ownership:
+    - STUDENT: Forbidden (403).
+    - INSTRUCTOR: Permitted only for exams they created/own.
+    - ADMIN: Permitted for any exam.
+    Computes score distribution histogram, summary statistics, top difficult questions,
+    and student score sheet.
+    """
+    try:
+        exam_uuid = uuid.UUID(exam_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"exam_id '{exam_id}' không phải định dạng UUID hợp lệ.",
+        )
+
+    try:
+        data = get_exam_distribution_analytics(db, exam_uuid, current_user=current_user)
+        return APIResponse(
+            success=True,
+            message="Dữ liệu phổ điểm và phân tích đề thi tải thành công.",
+            data=data,
+        )
+    except NotFoundError as err:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(err),
+        )
+    except PermissionError as err:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(err),
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi khi tính toán phổ điểm đề thi: {str(exc)}",
+        )
+
+
+@router.get(
+    "/analytics/exam/{exam_id}/csv",
+)
+def export_exam_scores_csv(
+    exam_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Export exam scoresheet to CSV format for lecturers with UTF-8 BOM encoding."""
+    try:
+        exam_uuid = uuid.UUID(exam_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"exam_id '{exam_id}' không phải định dạng UUID hợp lệ.",
+        )
+
+    try:
+        data = get_exam_distribution_analytics(db, exam_uuid, current_user=current_user)
+    except NotFoundError as err:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err))
+    except PermissionError as err:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(err))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi khi xuất bảng điểm CSV: {str(exc)}",
+        )
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    writer.writerow(["Mã đề thi", data.get("exam_code", "")])
+    writer.writerow(["Tên đề thi", data.get("exam_title", "")])
+    writer.writerow(["Tổng số lượt thi", data.get("summary", {}).get("total_attempts", 0)])
+    writer.writerow(["Điểm trung bình", data.get("summary", {}).get("avg_score", 0.0)])
+    writer.writerow(["Điểm cao nhất", data.get("summary", {}).get("max_score", 0.0)])
+    writer.writerow(["Điểm thấp nhất", data.get("summary", {}).get("min_score", 0.0)])
+    writer.writerow([])
+
+    writer.writerow([
+        "STT",
+        "Họ và tên thí sinh",
+        "Email",
+        "Lần thi",
+        "Điểm số (thang 10)",
+        "Thời gian làm bài (giây)",
+        "Số lần vi phạm",
+        "Thời điểm nộp bài",
+        "Trạng thái",
+    ])
+
+    for idx, row in enumerate(data.get("student_scores", []), start=1):
+        writer.writerow([
+            idx,
+            row.get("student_name", ""),
+            row.get("student_email", ""),
+            row.get("attempt_number", 1),
+            row.get("score", 0.0),
+            row.get("time_spent_seconds", 0),
+            row.get("violation_count", 0),
+            row.get("submitted_at", ""),
+            row.get("status", ""),
+        ])
+
+    csv_content = output.getvalue()
+    filename = f"bang_diem_{data.get('exam_code', exam_id)}.csv"
+
+    return Response(
+        content=csv_content.encode("utf-8-sig"),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
     )

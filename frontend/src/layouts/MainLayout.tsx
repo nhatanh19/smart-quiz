@@ -74,19 +74,21 @@ export const MainLayout: React.FC = () => {
               <span>Exam (M3)</span>
             </NavLink>
 
-            {manager && <NavLink
-              to="/instructor/analytics"
-              className={({ isActive }) =>
-                `flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  isActive
-                    ? "bg-primary text-white"
-                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-                }`
-              }
-            >
-              <BarChart2 className="w-4 h-4" />
-              <span>Analytics (M4)</span>
-            </NavLink>}
+            {user && (
+              <NavLink
+                to={manager ? "/instructor/analytics" : "/student/analytics"}
+                className={({ isActive }) =>
+                  `flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    isActive
+                      ? "bg-primary text-white"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                  }`
+                }
+              >
+                <BarChart2 className="w-4 h-4" />
+                <span>Analytics (M4)</span>
+              </NavLink>
+            )}
           </nav>
 
           {/* Auth Action */}

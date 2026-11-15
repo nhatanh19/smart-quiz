@@ -165,6 +165,7 @@ class ExamReviewResponseSchema(BaseModel):
 
 
 # ==============================================================================
+# ==============================================================================
 # ISSUE #17: KNOWLEDGE GAP DIAGNOSTIC SCHEMAS (WBS 5.2.2)
 # ==============================================================================
 
@@ -203,3 +204,124 @@ class KnowledgeGapDiagnosticResponse(BaseModel):
     weak_topics: List[WeakTopicItemSchema]
     advice: List[ActionableStudyAdviceSchema]
     generated_at: str
+
+
+# ==============================================================================
+# ISSUE #36: LEARNING ANALYTICS & SCORE DISTRIBUTION DASHBOARD (WBS 5.3)
+# ==============================================================================
+
+
+class StudentScoreTrendItemSchema(BaseModel):
+    attempt_id: str
+    exam_id: str
+    exam_title: str
+    attempt_number: int
+    score: float
+    started_at: Optional[str] = None
+    submitted_at: Optional[str] = None
+    time_spent_seconds: int = 0
+    violation_count: int = 0
+    status: str
+
+
+class TopicMasteryItemSchema(BaseModel):
+    category_id: Optional[str] = None
+    category_name: str
+    total_questions: int
+    correct_count: int
+    incorrect_count: int
+    accuracy_percentage: float
+    mastery_level: str  # EXCELLENT | GOOD | AVERAGE | NEEDS_IMPROVEMENT
+
+
+class StudentKnowledgeGapSchema(BaseModel):
+    category_name: str
+    incorrect_count: int
+    accuracy_percentage: float
+    advice: str
+
+
+class StudentAnalyticsSummarySchema(BaseModel):
+    total_attempts: int
+    total_exams: int
+    average_score: float
+    highest_score: float
+    lowest_score: float
+    pass_rate: float
+
+
+class StudentAnalyticsResponseSchema(BaseModel):
+    student_id: str
+    student_name: str
+    student_email: str
+    summary: StudentAnalyticsSummarySchema
+    trends: List[StudentScoreTrendItemSchema]
+    topics_mastery: List[TopicMasteryItemSchema]
+    knowledge_gaps: List[StudentKnowledgeGapSchema]
+
+
+class ScoreDistributionBinSchema(BaseModel):
+    bin_label: str
+    min_score: float
+    max_score: float
+    count: int
+    percentage: float
+
+
+class DifficultQuestionItemSchema(BaseModel):
+    question_id: str
+    content: str
+    question_type: str
+    category_name: Optional[str] = None
+    total_responses: int
+    wrong_count: int
+    correct_count: int
+    incorrect_rate: float
+
+
+class StudentScoreRecordSchema(BaseModel):
+    student_id: str
+    student_name: str
+    student_email: str
+    attempt_id: str
+    attempt_number: int
+    score: float
+    submitted_at: Optional[str] = None
+    time_spent_seconds: int = 0
+    violation_count: int = 0
+    status: str
+
+
+class ExamAnalyticsSummarySchema(BaseModel):
+    total_attempts: int
+    total_students: int
+    min_score: float
+    max_score: float
+    avg_score: float
+    median_score: float
+    pass_count: int
+    fail_count: int
+    pass_rate: float
+    standard_deviation: float
+
+
+class ExamAnalyticsResponseSchema(BaseModel):
+    exam_id: str
+    exam_code: str
+    exam_title: str
+    duration_minutes: int
+    total_questions: int
+    summary: ExamAnalyticsSummarySchema
+    score_distribution: List[ScoreDistributionBinSchema]
+    grade_distribution: List[ScoreDistributionBinSchema]
+    difficult_questions: List[DifficultQuestionItemSchema]
+    student_scores: List[StudentScoreRecordSchema]
+
+
+class AccessibleExamItemSchema(BaseModel):
+    id: str
+    exam_code: str
+    title: str
+    duration_minutes: int
+    created_at: Optional[str] = None
+

@@ -49,6 +49,12 @@ describe("role protected routes", () => {
     expect(screen.queryByRole("heading", { name: /403/ })).toBeNull();
     expect(screen.getByTestId("location").textContent).toBe("/review/attempt-id");
   });
+  it("allows student to access /student/analytics", () => {
+    auth.user = user("STUDENT");
+    open("/student/analytics");
+    expect(screen.queryByRole("heading", { name: /403/ })).toBeNull();
+    expect(screen.getByTestId("location").textContent).toBe("/student/analytics");
+  });
   it("blocks instructor from admin routes", () => {
     auth.user = user("INSTRUCTOR");
     open("/admin/users");
