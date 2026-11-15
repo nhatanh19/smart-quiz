@@ -67,6 +67,60 @@ vi.mock("@/services/aiGeneratorApi", () => ({
     type_distribution: { SINGLE_CHOICE: 1, MULTIPLE_CHOICE: 1, TRUE_FALSE: 0 },
     quality_checks: { rejected_invalid_candidates: 0, repair_calls: 0 },
   }),
+  generateFromContext: vi.fn().mockResolvedValue({
+    topic: "Chương 4 - Tầng Giao vận",
+    total_requested: 2,
+    total_generated: 2,
+    chunks_used: 2,
+    total_chunks: 3,
+    generated_questions: [
+      {
+        category_id: null,
+        content: "Giao thức nào cung cấp kênh truyền tin cậy trong bộ giao thức TCP/IP?",
+        question_type: "SINGLE_CHOICE",
+        cognitive_level: "REMEMBER",
+        level: "EASY",
+        options: [
+          { id: "A", text: "TCP", is_correct: true },
+          { id: "B", text: "UDP", is_correct: false },
+          { id: "C", text: "IP", is_correct: false },
+          { id: "D", text: "ICMP", is_correct: false },
+        ],
+        tags: ["TCP"],
+        explanation: "TCP cung cấp kênh truyền tin cậy thông qua bắt tay 3 bước.",
+        source_type: "AI_GENERATED",
+      },
+      {
+        category_id: null,
+        content: "UDP không thực hiện bắt tay 3 bước trước khi truyền dữ liệu.",
+        question_type: "TRUE_FALSE",
+        cognitive_level: "UNDERSTAND",
+        level: "MEDIUM",
+        options: [
+          { id: "A", text: "Đúng", is_correct: true },
+          { id: "B", text: "Sai", is_correct: false },
+        ],
+        tags: ["UDP"],
+        explanation: "UDP là giao thức phi kết nối (connectionless).",
+        source_type: "AI_GENERATED",
+      },
+    ],
+    cognitive_distribution: { REMEMBER: 1, UNDERSTAND: 1, APPLY: 0 },
+    type_distribution: { SINGLE_CHOICE: 1, MULTIPLE_CHOICE: 0, TRUE_FALSE: 1 },
+    quality_checks: { context_grounded: true, rejected_invalid_candidates: 0, repair_calls: 0 },
+  }),
+}));
+
+vi.mock("@/services/parserApi", () => ({
+  uploadAndExtractDocument: vi.fn().mockResolvedValue({
+    filename: "giaotrinh_mang.pdf",
+    raw_text: "Nội dung giáo trình mạng máy tính chi tiết về giao thức TCP và UDP và bắt tay ba bước.",
+    file_type: "pdf",
+    file_size: 1024,
+    character_count: 85,
+    word_count: 16,
+  }),
+  extractUploadErrorMessage: (err: unknown) => (err instanceof Error ? err.message : "Lỗi upload"),
 }));
 
 vi.mock("@/services/questionBankApi", () => ({
@@ -96,22 +150,19 @@ afterEach(() => {
 // ==============================================================================
 
 describe("AiGenPage — Config Step", () => {
-  it("renders the page header correctly", () => {
+  it("renders the page header and tab switcher correctly", () => {
     render(<AiGenPage />);
-    expect(screen.getByText("AI Exam Matrix Builder")).toBeTruthy();
-    expect(
-      screen.getByText(/Cấu hình ma trận đề thi theo thang nhận thức Bloom/),
-    ).toBeTruthy();
+    expect(screen.getByText("AI Exam Generator & Matrix Builder")).toBeTruthy();
+    expect(screen.getByText("Cấu hình Ma trận Bloom")).toBeTruthy();
+    expect(screen.getByText("Sinh từ Tài liệu & Giáo trình")).toBeTruthy();
   });
 
   it("renders all form inputs: topic, total questions, bloom ratios, type ratios", () => {
     render(<AiGenPage />);
     expect(screen.getByPlaceholderText(/VD: Lập trình hướng đối tượng/)).toBeTruthy();
-    // Bloom ratio labels
     expect(screen.getByText("Nhận biết")).toBeTruthy();
     expect(screen.getByText("Thông hiểu")).toBeTruthy();
     expect(screen.getByText("Vận dụng")).toBeTruthy();
-    // Type ratio labels
     expect(screen.getByText("1 đáp án")).toBeTruthy();
     expect(screen.getByText("Nhiều đáp án")).toBeTruthy();
     expect(screen.getByText("Đúng/Sai")).toBeTruthy();
@@ -133,7 +184,6 @@ describe("AiGenPage — Config Step", () => {
 
   it("shows sum validation badge: green when 100, red when not", () => {
     render(<AiGenPage />);
-    // Default bloom = 40+40+20 = 100 → Tổng: 100%
     const badges = screen.getAllByText(/Tổng: 100%/);
     expect(badges.length).toBeGreaterThanOrEqual(1);
   });
@@ -163,8 +213,71 @@ describe("AiGenPage — Config Step", () => {
     await waitFor(() => {
       expect(screen.getByText(/Phân bổ ma trận — Test Topic/)).toBeTruthy();
     });
-    // Matrix table headers
     expect(screen.getByText("Nhận thức ↓ / Loại →")).toBeTruthy();
+  });
+});
+
+describe("AiGenPage — Document Context Tab (Issue #33)", () => {
+  it("switches to document tab when clicking 'Sinh từ Tài liệu & Giáo trình'", () => {
+    render(<AiGenPage />);
+    const docTabBtn = screen.getByText("Sinh từ Tài liệu & Giáo trình");
+    fireEvent.click(docTabBtn);
+
+    expect(screen.getByText("Tài liệu & Ngữ cảnh bài giảng")).toBeTruthy();
+    expect(screen.getByPlaceholderText(/Dán nội dung bài giảng/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Sinh câu hỏi từ tài liệu/ })).toBeTruthy();
+  });
+
+  it("disables 'Sinh câu hỏi từ tài liệu' button when raw_text is less than 20 characters", () => {
+    render(<AiGenPage />);
+    fireEvent.click(screen.getByText("Sinh từ Tài liệu & Giáo trình"));
+
+    const textarea = screen.getByPlaceholderText(/Dán nội dung bài giảng/);
+    const genDocBtn = screen.getByRole("button", { name: /Sinh câu hỏi từ tài liệu/ });
+
+    expect(genDocBtn.hasAttribute("disabled")).toBe(true);
+
+    fireEvent.change(textarea, { target: { value: "Quá ngắn" } });
+    expect(genDocBtn.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("toggles advanced sliding window chunking configuration", () => {
+    render(<AiGenPage />);
+    fireEvent.click(screen.getByText("Sinh từ Tài liệu & Giáo trình"));
+
+    const advancedToggle = screen.getByText(/Tùy chỉnh thuật toán phân đoạn/);
+    fireEvent.click(advancedToggle);
+
+    expect(screen.getByText(/Kích thước đoạn \(Chunk size - ký tự\):/)).toBeTruthy();
+    expect(screen.getByText(/Độ gối đầu \(Overlap - ký tự\):/)).toBeTruthy();
+  });
+
+  it("generates questions from document context and displays chunk metrics in review", async () => {
+    const { generateFromContext } = await import("@/services/aiGeneratorApi");
+    render(<AiGenPage />);
+    fireEvent.click(screen.getByText("Sinh từ Tài liệu & Giáo trình"));
+
+    const textarea = screen.getByPlaceholderText(/Dán nội dung bài giảng/);
+    fireEvent.change(textarea, {
+      target: {
+        value: "Chương 4: Tầng giao vận và các giao thức TCP, UDP trong mô hình OSI và Internet.",
+      },
+    });
+
+    const genDocBtn = screen.getByRole("button", { name: /Sinh câu hỏi từ tài liệu/ });
+    expect(genDocBtn.hasAttribute("disabled")).toBe(false);
+
+    fireEvent.click(genDocBtn);
+
+    await waitFor(() => {
+      expect(generateFromContext).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Duyệt câu hỏi AI")).toBeTruthy();
+      expect(screen.getByText(/Giao thức nào cung cấp kênh truyền tin cậy/)).toBeTruthy();
+      expect(screen.getByText(/2\/3 đoạn ngữ cảnh \(Sliding Window\)/)).toBeTruthy();
+    });
   });
 });
 
@@ -231,16 +344,14 @@ describe("AiGenPage — Generate & Review Step", () => {
   it("allows toggling back to config step via Cấu hình lại button", async () => {
     await renderAndGenerate();
     fireEvent.click(screen.getByRole("button", { name: /Cấu hình lại/ }));
-    expect(screen.getByText("AI Exam Matrix Builder")).toBeTruthy();
+    expect(screen.getByText("AI Exam Generator & Matrix Builder")).toBeTruthy();
   });
 
   it("Select all / Deselect all toggles correctly", async () => {
     await renderAndGenerate();
-    // All selected by default
     const deselectBtn = screen.getByRole("button", { name: /Bỏ chọn tất cả/ });
     expect(deselectBtn).toBeTruthy();
     fireEvent.click(deselectBtn);
-    // After deselect: button text changes
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /Chọn tất cả/ })).toBeTruthy();
     });

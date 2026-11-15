@@ -89,6 +89,40 @@ export interface BloomTemplatesData {
   question_type_templates: QuestionTypeTemplateItem[];
 }
 
+export interface GenerateFromContextRequest {
+  raw_text: string;
+  topic?: string;
+  subject_name?: string;
+  category_id?: string;
+  total_questions: number;
+  cognitive_ratios?: CognitiveRatios;
+  type_ratios?: TypeRatios;
+  language?: "vi" | "en";
+  additional_instructions?: string;
+  temperature?: number;
+  chunk_size?: number;
+  overlap?: number;
+}
+
+export interface GenerateFromContextData {
+  topic: string;
+  subject_name?: string | null;
+  total_requested: number;
+  total_generated: number;
+  chunks_used: number;
+  total_chunks: number;
+  generated_questions: GeneratedQuestionItem[];
+  cognitive_distribution: Record<BloomLevel, number>;
+  type_distribution: Record<QuestionType, number>;
+  quality_checks: {
+    context_grounded?: boolean;
+    exact_count_match?: boolean;
+    duplicate_questions_blocked?: boolean;
+    rejected_invalid_candidates: number;
+    repair_calls: number;
+  };
+}
+
 // ==============================================================================
 // API FUNCTIONS
 // ==============================================================================
@@ -137,5 +171,21 @@ export async function generateByMatrix(
   );
   const data = response.data?.data;
   if (!data) throw new Error("Không nhận được câu hỏi từ AI. Vui lòng thử lại.");
+  return data;
+}
+
+/**
+ * POST /api/v1/ai-generator/generate-from-context
+ * Sinh câu hỏi bám sát tài liệu bài giảng / văn bản bằng Sliding Window Chunking và AI.
+ */
+export async function generateFromContext(
+  payload: GenerateFromContextRequest,
+): Promise<GenerateFromContextData> {
+  const response = await api.post<ApiResponse<GenerateFromContextData>>(
+    `${AI_GEN_PATH}/generate-from-context`,
+    payload,
+  );
+  const data = response.data?.data;
+  if (!data) throw new Error("Không nhận được câu hỏi từ tài liệu. Vui lòng thử lại.");
   return data;
 }
