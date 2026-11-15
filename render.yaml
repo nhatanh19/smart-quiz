@@ -32,11 +32,14 @@ services:
     staticPublishPath: "./frontend/dist"
     routes:
       - type: rewrite
+        source: /api/*
+        destination: https://smart-quiz-backend.onrender.com/api/*
+      - type: rewrite
         source: /*
         destination: /index.html
     envVars:
       - key: VITE_API_BASE_URL
-        value: "https://smart-quiz-backend.onrender.com/api/v1"
+        value: "/api/v1"
 
 databases:
   - name: smart-quiz-db
