@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { AxiosError, AxiosResponse, InternalAxiosRequestConfig } from "axios";
 import { apiClient } from "@/lib/apiClient";
+import { parseQuestionsFromText, uploadAndParseDocument } from "@/services/parserApi";
 import DocumentParserTab from "./DocumentParserTab";
 import ParserPlaceholder from "./ParserPlaceholder";
 
@@ -148,5 +149,99 @@ describe("ParserPlaceholder tab integration", () => {
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "Ngân hàng câu hỏi" })).toBeTruthy(),
     );
+  });
+});
+
+describe("Regex question parser API helpers (Issue #6)", () => {
+  it("calls POST /parser/parse-questions with HttpOnly cookies and returns normalized questions", async () => {
+    let capturedConfig: InternalAxiosRequestConfig | undefined;
+    apiClient.defaults.adapter = async (config) => {
+      capturedConfig = config;
+      return makeResponse(config, {
+        success: true,
+        message: "Đã nhận diện 1 câu hỏi từ văn bản.",
+        data: {
+          filename: "de_mau.txt",
+          questions: [
+            {
+              question_number: 1,
+              content: "WBS là gì?",
+              question_type: "SINGLE_CHOICE",
+              cognitive_level: "REMEMBER",
+              level: "MEDIUM",
+              options: [
+                { id: "A", text: "Work Breakdown Structure", is_correct: true },
+                { id: "B", text: "Work Budget Schedule", is_correct: false },
+              ],
+              correct_option_ids: ["A"],
+              explanation: "Cấu trúc phân rã công việc.",
+              tags: [],
+              source_type: "FILE_PARSER",
+              is_valid: true,
+              warnings: [],
+            },
+          ],
+          statistics: {
+            total_blocks_detected: 1,
+            total_questions: 1,
+            valid_questions: 1,
+            questions_with_correct_answer: 1,
+            questions_with_explanation: 1,
+            warnings_count: 0,
+          },
+          unmatched_answer_keys: {},
+          warnings: [],
+        },
+      });
+    };
+
+    const result = await parseQuestionsFromText("Câu 1: WBS là gì?\n*A. WBS\nB. Schedule", "de_mau.txt");
+    expect(capturedConfig?.url).toBe("/parser/parse-questions");
+    expect(capturedConfig?.withCredentials).toBe(true);
+    expect(capturedConfig?.headers?.Authorization).toBeUndefined();
+    expect(result.statistics.total_questions).toBe(1);
+    expect(result.questions[0].correct_option_ids).toEqual(["A"]);
+    expect(result.questions[0].source_type).toBe("FILE_PARSER");
+  });
+
+  it("calls POST /parser/upload-and-parse with multipart FormData", async () => {
+    let capturedConfig: InternalAxiosRequestConfig | undefined;
+    apiClient.defaults.adapter = async (config) => {
+      capturedConfig = config;
+      return makeResponse(config, {
+        success: true,
+        message: "Đã bóc tách văn bản và nhận diện 1 câu hỏi.",
+        data: {
+          document: {
+            filename: "sample.docx",
+            file_type: "docx",
+            file_size: 1024,
+            character_count: 80,
+            word_count: 15,
+            raw_text: "Câu 1: ...",
+          },
+          questions: [],
+          statistics: {
+            total_blocks_detected: 0,
+            total_questions: 0,
+            valid_questions: 0,
+            questions_with_correct_answer: 0,
+            questions_with_explanation: 0,
+            warnings_count: 0,
+          },
+          unmatched_answer_keys: {},
+          warnings: [],
+        },
+      });
+    };
+
+    const file = new File(["docx"], "sample.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+    const res = await uploadAndParseDocument(file);
+    expect(capturedConfig?.url).toBe("/parser/upload-and-parse");
+    expect(capturedConfig?.withCredentials).toBe(true);
+    expect(capturedConfig?.data).toBeInstanceOf(FormData);
+    expect(res.document.filename).toBe("sample.docx");
   });
 });

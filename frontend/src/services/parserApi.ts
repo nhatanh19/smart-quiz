@@ -1,6 +1,13 @@
 import axios, { AxiosProgressEvent } from "axios";
 import { apiClient } from "@/lib/apiClient";
-import type { ApiResponse } from "@/types";
+import type {
+  ApiResponse,
+  CognitiveLevel,
+  QuestionLevel,
+  QuestionOption,
+  QuestionSource,
+  QuestionType,
+} from "@/types";
 
 export interface DocumentParseResult {
   filename: string;
@@ -10,6 +17,46 @@ export interface DocumentParseResult {
   character_count: number;
   word_count: number;
   page_count?: number;
+}
+
+export interface ParsedQuestionItem {
+  question_number?: number | null;
+  content: string;
+  question_type: QuestionType;
+  cognitive_level: CognitiveLevel;
+  level: QuestionLevel;
+  options: QuestionOption[];
+  correct_option_ids: string[];
+  explanation?: string | null;
+  tags: string[];
+  source_type: QuestionSource;
+  is_valid: boolean;
+  warnings: string[];
+}
+
+export interface ParseStatistics {
+  total_blocks_detected: number;
+  total_questions: number;
+  valid_questions: number;
+  questions_with_correct_answer: number;
+  questions_with_explanation: number;
+  warnings_count: number;
+}
+
+export interface ParsedQuestionBatchResult {
+  filename?: string | null;
+  questions: ParsedQuestionItem[];
+  statistics: ParseStatistics;
+  unmatched_answer_keys: Record<number, string[]>;
+  warnings: string[];
+}
+
+export interface DocumentQuestionExtractionResult {
+  document: DocumentParseResult;
+  questions: ParsedQuestionItem[];
+  statistics: ParseStatistics;
+  unmatched_answer_keys: Record<number, string[]>;
+  warnings: string[];
 }
 
 /**
@@ -56,6 +103,54 @@ export async function uploadAndExtractDocument(
       (rawText.trim() ? rawText.trim().split(/\s+/).length : 0),
     page_count: payload.page_count,
   };
+}
+
+/**
+ * Parse raw UTF-8 text into structured quiz questions via POST /parser/parse-questions.
+ */
+export async function parseQuestionsFromText(
+  rawText: string,
+  filename?: string,
+): Promise<ParsedQuestionBatchResult> {
+  const response = await apiClient.post<ApiResponse<ParsedQuestionBatchResult>>(
+    "/parser/parse-questions",
+    {
+      raw_text: rawText,
+      filename: filename ?? "direct_input.txt",
+    },
+  );
+
+  const payload = response.data?.data;
+  if (!payload) {
+    throw new Error("Không nhận được dữ liệu câu hỏi chuẩn hóa từ máy chủ.");
+  }
+  return payload;
+}
+
+/**
+ * Upload a document and extract both raw text and regex-parsed structured questions
+ * via POST /parser/upload-and-parse.
+ */
+export async function uploadAndParseDocument(
+  file: File,
+  onUploadProgress?: (progressEvent: AxiosProgressEvent) => void,
+): Promise<DocumentQuestionExtractionResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await apiClient.post<ApiResponse<DocumentQuestionExtractionResult>>(
+    "/parser/upload-and-parse",
+    formData,
+    {
+      onUploadProgress,
+    },
+  );
+
+  const payload = response.data?.data;
+  if (!payload) {
+    throw new Error("Không nhận được dữ liệu bóc tách câu hỏi từ máy chủ.");
+  }
+  return payload;
 }
 
 /**

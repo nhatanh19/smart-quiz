@@ -9,6 +9,7 @@ from app.modules.parser.services.file_parser_service import (
     PdfExtractor,
     TxtExtractor,
 )
+from app.modules.parser.services.regex_question_parser import RegexQuestionParserService
 
 __all__ = [
     "BaseExtractor",
@@ -18,4 +19,5 @@ __all__ = [
     "TxtExtractor",
     "FileParserService",
     "DocumentParserService",
+    "RegexQuestionParserService",
 ]
