@@ -1,5 +1,7 @@
 import axios from "axios";
 
+export const AUTH_REQUEST_TIMEOUT_MS = 15_000;
+
 export const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api/v1",
   withCredentials: true,
@@ -30,7 +32,7 @@ apiClient.interceptors.response.use(response => response, async error => {
   if (!endingSession && error.response?.status === 401 && config && !config._retried &&
       !/\/auth\/(login|register|refresh|logout)/.test(config.url || "")) {
     config._retried = true;
-    refreshing ||= apiClient.post("/auth/refresh").finally(() => { refreshing = null; });
+    refreshing ||= apiClient.post("/auth/refresh", undefined, { timeout: AUTH_REQUEST_TIMEOUT_MS }).finally(() => { refreshing = null; });
     await refreshing;
     return apiClient(config);
   }

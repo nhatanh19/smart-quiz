@@ -28,7 +28,7 @@ services:
         value: "true"
       - key: BACKEND_CORS_ORIGINS
         # Update with the actual frontend URL if Render appends a random suffix
-        value: '["https://smart-quiz-frontend.onrender.com"]'
+        value: '["https://smart-quiz-frontend-0gao.onrender.com"]'
       - key: LLM_BASE_URL
         value: "https://generativelanguage.googleapis.com/v1beta/openai/"
       - key: LLM_API_KEY
@@ -52,7 +52,7 @@ services:
       - type: rewrite
         source: /api/*
         # Update host below if Render appends a suffix to smart-quiz-backend
-        destination: https://smart-quiz-backend.onrender.com/api/*
+        destination: https://smart-quiz-backend-7wjj.onrender.com/api/*
       - type: rewrite
         source: /*
         destination: /index.html
