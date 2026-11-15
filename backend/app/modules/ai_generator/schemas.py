@@ -378,3 +378,124 @@ class GenerateByMatrixResponse(BaseModel):
     generated_questions: List[GeneratedQuestionItem]
     quality_checks: Dict[str, Any]
 
+
+class GenerateFromContextRequest(BaseModel):
+    """Request payload for chunked document / context-based question generation."""
+
+    raw_text: str = Field(min_length=20, max_length=150_000)
+    topic: Optional[str] = Field(default=None, max_length=500)
+    subject_name: Optional[str] = Field(default=None, max_length=255)
+    category_id: Optional[uuid.UUID] = None
+    total_questions: Optional[int] = Field(default=10, ge=1, le=50)
+    cognitive_distribution: Optional[CognitiveDistributionSchema] = None
+    cognitive_ratios: Optional[Dict[CognitiveLevel, float]] = None
+    type_distribution: Optional[QuestionTypeDistributionSchema] = None
+    type_ratios: Optional[Dict[QuestionType, float]] = None
+    language: Literal["vi", "en"] = "vi"
+    additional_instructions: Optional[str] = Field(default=None, max_length=2000)
+    temperature: float = Field(default=0.35, ge=0.0, le=1.0)
+    chunk_size: int = Field(default=1500, ge=200, le=10000)
+    overlap: int = Field(default=200, ge=0, le=2000)
+
+    @field_validator("raw_text", "topic", "subject_name", "additional_instructions", mode="before")
+    @classmethod
+    def strip_strings(cls, value: Any) -> Any:
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("raw_text")
+    @classmethod
+    def validate_raw_text(cls, value: str) -> str:
+        cleaned = value.strip()
+        if len(cleaned) < 20:
+            raise ValueError("Nội dung tài liệu (raw_text) phải có ít nhất 20 ký tự hợp lệ")
+        return cleaned
+
+    @model_validator(mode="after")
+    def normalize_matrix_distributions(self) -> "GenerateFromContextRequest":
+        if self.overlap >= self.chunk_size:
+            raise ValueError("overlap phải nhỏ hơn chunk_size")
+
+        if not self.topic or not self.topic.strip():
+            # Derive topic fallback from first line of text or default
+            first_line = self.raw_text.split("\n", 1)[0].strip()[:100]
+            self.topic = first_line if len(first_line) >= 5 else "Tài liệu học tập"
+
+        if self.cognitive_distribution is not None and self.cognitive_ratios is not None:
+            raise ValueError("Chỉ cung cấp cognitive_distribution hoặc cognitive_ratios, không truyền đồng thời cả hai")
+        if self.type_distribution is not None and self.type_ratios is not None:
+            raise ValueError("Chỉ cung cấp type_distribution hoặc type_ratios, không truyền đồng thời cả hai")
+
+        if self.cognitive_distribution is not None:
+            cog_total = self.cognitive_distribution.total
+            if cog_total < 1:
+                raise ValueError("Tổng số câu hỏi trong cognitive_distribution phải lớn hơn hoặc bằng 1")
+            if cog_total > 50:
+                raise ValueError("Tổng số câu hỏi không được vượt quá 50")
+            if self.total_questions is not None and self.total_questions != cog_total:
+                raise ValueError(
+                    f"Tổng cognitive_distribution ({cog_total}) không khớp với total_questions ({self.total_questions})"
+                )
+            self.total_questions = cog_total
+        elif self.cognitive_ratios is not None:
+            target_total = self.total_questions if self.total_questions is not None else 10
+            allocated = allocate_counts_by_weights(
+                target_total, self.cognitive_ratios, COGNITIVE_ORDER
+            )
+            self.total_questions = target_total
+            self.cognitive_distribution = CognitiveDistributionSchema(
+                **{level.value: count for level, count in allocated.items()}
+            )
+        else:
+            target_total = self.total_questions if self.total_questions is not None else 10
+            default_weights = {
+                CognitiveLevel.REMEMBER: 40.0,
+                CognitiveLevel.UNDERSTAND: 40.0,
+                CognitiveLevel.APPLY: 20.0,
+            }
+            allocated = allocate_counts_by_weights(
+                target_total, default_weights, COGNITIVE_ORDER
+            )
+            self.total_questions = target_total
+            self.cognitive_distribution = CognitiveDistributionSchema(
+                **{level.value: count for level, count in allocated.items()}
+            )
+
+        if self.type_distribution is not None:
+            type_total = self.type_distribution.total
+            if type_total != self.total_questions:
+                raise ValueError(
+                    f"Tổng type_distribution ({type_total}) không khớp với total_questions ({self.total_questions})"
+                )
+        elif self.type_ratios is not None:
+            allocated_types = allocate_counts_by_weights(
+                self.total_questions, self.type_ratios, QUESTION_TYPE_ORDER
+            )
+            self.type_distribution = QuestionTypeDistributionSchema(
+                **{qtype.value: count for qtype, count in allocated_types.items()}
+            )
+        else:
+            self.type_distribution = QuestionTypeDistributionSchema(
+                SINGLE_CHOICE=self.total_questions,
+                MULTIPLE_CHOICE=0,
+                TRUE_FALSE=0,
+            )
+
+        return self
+
+
+class GenerateFromContextResponse(BaseModel):
+    """Response payload for document context chunked AI question generation."""
+
+    topic: str
+    subject_name: Optional[str] = None
+    total_requested: int
+    total_generated: int
+    chunks_used: int
+    total_chunks: int
+    cognitive_distribution: Dict[str, int]
+    type_distribution: Dict[str, int]
+    allocations: List[MatrixCellAllocation]
+    generated_questions: List[GeneratedQuestionItem]
+    quality_checks: Dict[str, Any]
+
+

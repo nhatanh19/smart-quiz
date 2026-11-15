@@ -355,6 +355,7 @@ def build_cell_prompts(
     additional_instructions: Optional[str] = None,
     existing_question_contents: Optional[Sequence[str]] = None,
     repair_feedback: Optional[str] = None,
+    context_text: Optional[str] = None,
 ) -> Tuple[str, str]:
     """Build tailored (system_prompt, user_prompt) for one Bloom level + question type cell."""
     if count < 1:
@@ -400,6 +401,14 @@ Nhiệm vụ của bạn là soạn thảo bộ câu hỏi trắc nghiệm chu�
 """
 
     subject_line = f"- Môn học / Học phần: {subject_name.strip()}\n" if subject_name else ""
+    context_block = (
+        f"\n[NGỮ CẢNH TÀI LIỆU BẮT BUỘC ĐỂ SOẠN CÂU HỎI]:\n{context_text.strip()}\n\n"
+        "QUY TẮC CỐT LÕI VỀ NGỮ CẢNH: Các câu hỏi, phương án đúng và phương án nhiễu PHẢI "
+        "dựa trực tiếp trên kiến thức và dữ kiện có trong đoạn [NGỮ CẢNH TÀI LIỆU] trên. "
+        "Tuyệt đối không bịa đặt hoặc suy diễn thông tin mâu thuẫn với tài liệu.\n"
+        if context_text and context_text.strip()
+        else ""
+    )
     extra_block = (
         f"\n[YÊU CẦU BỔ SUNG TỪ GIẢNG VIÊN]:\n{additional_instructions.strip()}\n"
         if additional_instructions and additional_instructions.strip()
@@ -432,7 +441,7 @@ Nhiệm vụ của bạn là soạn thảo bộ câu hỏi trắc nghiệm chu�
 - Thể loại BẮT BUỘC cho TẤT CẢ {count} câu: "{qtype.question_type.value}" ({qtype.label_vi}).
 - Mức độ khó đề xuất ("level"): "{bloom.default_difficulty.value}".
 - Ngôn ngữ câu hỏi & giải thích: {language_label}.
-{extra_block}{dedup_block}{repair_block}
+{context_block}{extra_block}{dedup_block}{repair_block}
 Đảm bảo mỗi câu hỏi trong mảng JSON "questions":
 1. Có đúng "cognitive_level": "{bloom.cognitive_level.value}" và "question_type": "{qtype.question_type.value}".
 2. Có danh sách "options" đáp ứng đúng quy tắc của {qtype.question_type.value}, các phương án hoàn toàn không trùng lặp nội dung, không chứa "Tất cả các đáp án trên" hay "Không có đáp án nào đúng".

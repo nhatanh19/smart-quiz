@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import {
   Sparkles,
   Settings2,
@@ -13,14 +13,24 @@ import {
   AlertCircle,
   CheckCircle2,
   RefreshCw,
+  FileText,
+  SlidersHorizontal,
+  UploadCloud,
+  FileUp,
+  FileCheck,
 } from "lucide-react";
 import {
   previewMatrixAllocation,
   generateByMatrix,
+  generateFromContext,
   type MatrixRequest,
   type MatrixPreviewData,
   type GeneratedQuestionItem,
 } from "@/services/aiGeneratorApi";
+import {
+  uploadAndExtractDocument,
+  extractUploadErrorMessage,
+} from "@/services/parserApi";
 import {
   listSubjects,
   listCategories,
@@ -248,13 +258,17 @@ function QuestionCard({
 // ==============================================================================
 
 type Step = "config" | "review";
+type TabType = "matrix" | "document";
 
 interface LocalQuestion extends GeneratedQuestionItem {
   _localId: number;
 }
 
 export const AiGenPage: React.FC = () => {
-  // ── Config state ────────────────────────────────────────────────────────────
+  // ── Tab state ───────────────────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<TabType>("matrix");
+
+  // ── Shared Config state ─────────────────────────────────────────────────────
   const [topic, setTopic] = useState("");
   const [totalQuestions, setTotalQuestions] = useState(10);
 
@@ -274,7 +288,18 @@ export const AiGenPage: React.FC = () => {
   const typeSum =
     typeRatios.SINGLE_CHOICE + typeRatios.MULTIPLE_CHOICE + typeRatios.TRUE_FALSE;
 
-  // ── Preview state ────────────────────────────────────────────────────────────
+  // ── Document Tab state (Issue #33) ──────────────────────────────────────────
+  const [rawText, setRawText] = useState("");
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [chunkSize, setChunkSize] = useState(1500);
+  const [overlap, setOverlap] = useState(200);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [chunksInfo, setChunksInfo] = useState<{ used: number; total: number } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Preview state (Matrix Tab) ──────────────────────────────────────────────
   const [preview, setPreview] = useState<MatrixPreviewData | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -299,26 +324,33 @@ export const AiGenPage: React.FC = () => {
   const [saveError, setSaveError] = useState<string | null>(null);
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
-  const buildRequest = useCallback((): MatrixRequest => ({
+  const buildMatrixRequest = useCallback((): MatrixRequest => ({
     topic: topic.trim(),
     total_questions: totalQuestions,
     cognitive_ratios: bloomRatios,
     type_ratios: typeRatios,
   }), [topic, totalQuestions, bloomRatios, typeRatios]);
 
-  const canSubmit =
+  const canSubmitMatrix =
     topic.trim().length > 0 &&
     totalQuestions >= 1 &&
     bloomSum === 100 &&
     typeSum === 100;
 
-  // ── Handlers ─────────────────────────────────────────────────────────────────
+  const canSubmitDocument =
+    rawText.trim().length >= 20 &&
+    totalQuestions >= 1 &&
+    bloomSum === 100 &&
+    typeSum === 100 &&
+    overlap < chunkSize;
+
+  // ── Handlers (Matrix) ───────────────────────────────────────────────────────
   const handlePreview = async () => {
-    if (!canSubmit) return;
+    if (!canSubmitMatrix) return;
     setPreviewLoading(true);
     setPreviewError(null);
     try {
-      const data = await previewMatrixAllocation(buildRequest());
+      const data = await previewMatrixAllocation(buildMatrixRequest());
       setPreview(data);
     } catch (err) {
       setPreviewError(extractError(err));
@@ -327,12 +359,25 @@ export const AiGenPage: React.FC = () => {
     }
   };
 
+  const initSubjectCategories = async () => {
+    const subs = await listSubjects();
+    setSubjects(subs);
+    if (subs.length > 0) {
+      setSelectedSubjectId(subs[0].id);
+      const cats = await listCategories();
+      const filtered = cats.filter((c) => c.subject_id === subs[0].id);
+      setCategories(filtered);
+      if (filtered.length > 0) setSelectedCategoryId(filtered[0].id);
+    }
+  };
+
   const handleGenerate = async () => {
-    if (!canSubmit) return;
+    if (!canSubmitMatrix) return;
     setGenLoading(true);
     setGenError(null);
+    setChunksInfo(null);
     try {
-      const data = await generateByMatrix(buildRequest());
+      const data = await generateByMatrix(buildMatrixRequest());
       const local: LocalQuestion[] = data.generated_questions.map((q, i) => ({
         ...q,
         _localId: i,
@@ -340,17 +385,65 @@ export const AiGenPage: React.FC = () => {
       setQuestions(local);
       setSelectedIds(new Set(local.map((q) => q._localId)));
       setStep("review");
+      await initSubjectCategories();
+    } catch (err) {
+      setGenError(extractError(err));
+    } finally {
+      setGenLoading(false);
+    }
+  };
 
-      // Fetch subjects for save dropdown
-      const subs = await listSubjects();
-      setSubjects(subs);
-      if (subs.length > 0) {
-        setSelectedSubjectId(subs[0].id);
-        const cats = await listCategories();
-        const filtered = cats.filter((c) => c.subject_id === subs[0].id);
-        setCategories(filtered);
-        if (filtered.length > 0) setSelectedCategoryId(filtered[0].id);
+  // ── Handlers (Document Upload & Chunked Generate) ───────────────────────────
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadLoading(true);
+    setUploadError(null);
+    try {
+      const result = await uploadAndExtractDocument(file);
+      setRawText(result.raw_text);
+      setUploadedFileName(result.filename);
+      if (!topic.trim()) {
+        const inferredTopic = result.filename.replace(/\.[^/.]+$/, "");
+        setTopic(inferredTopic);
       }
+    } catch (err) {
+      setUploadError(extractUploadErrorMessage(err));
+    } finally {
+      setUploadLoading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleGenerateFromDoc = async () => {
+    if (!canSubmitDocument) return;
+    setGenLoading(true);
+    setGenError(null);
+    try {
+      const data = await generateFromContext({
+        raw_text: rawText.trim(),
+        topic: topic.trim() || undefined,
+        total_questions: totalQuestions,
+        cognitive_ratios: bloomRatios,
+        type_ratios: typeRatios,
+        chunk_size: chunkSize,
+        overlap: overlap,
+      });
+
+      setChunksInfo({
+        used: data.chunks_used,
+        total: data.total_chunks,
+      });
+
+      const local: LocalQuestion[] = data.generated_questions.map((q, i) => ({
+        ...q,
+        _localId: i,
+      }));
+      setQuestions(local);
+      setSelectedIds(new Set(local.map((q) => q._localId)));
+      setStep("review");
+      await initSubjectCategories();
     } catch (err) {
       setGenError(extractError(err));
     } finally {
@@ -439,219 +532,493 @@ export const AiGenPage: React.FC = () => {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-slate-800">
-              AI Exam Matrix Builder
+              AI Exam Generator & Matrix Builder
             </h1>
             <p className="text-sm text-slate-500">
-              Cấu hình ma trận đề thi theo thang nhận thức Bloom và sinh câu hỏi bằng AI
+              Sinh câu hỏi trắc nghiệm thông minh theo Ma trận Bloom hoặc bóc tách ngữ cảnh tài liệu
             </p>
           </div>
         </div>
 
-        {/* Config card */}
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6 space-y-6">
-          <div className="flex items-center gap-2 text-slate-700 font-semibold">
-            <Settings2 className="w-4 h-4 text-purple-500" />
-            Thông số cấu hình
-          </div>
-
-          {/* Topic */}
-          <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-slate-700">
-              Chủ đề <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-              placeholder="VD: Lập trình hướng đối tượng trong Python"
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
-            />
-          </div>
-
-          {/* Total questions */}
-          <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-slate-700">
-              Tổng số câu hỏi <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="number"
-              min={1}
-              max={50}
-              value={totalQuestions}
-              onChange={(e) =>
-                setTotalQuestions(clamp(Number(e.target.value), 1, 50))
-              }
-              className="w-28 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
-            />
-          </div>
-
-          {/* Bloom ratios */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-slate-700">
-                Tỷ lệ nhận thức Bloom
-              </label>
-              <SumBadge sum={bloomSum} label="Tổng" />
-            </div>
-            <RatioInput
-              label="Nhận biết"
-              value={bloomRatios.REMEMBER}
-              onChange={(v) => setBloomRatios((p) => ({ ...p, REMEMBER: v }))}
-              colorClass={BLOOM_COLORS.REMEMBER}
-            />
-            <RatioInput
-              label="Thông hiểu"
-              value={bloomRatios.UNDERSTAND}
-              onChange={(v) => setBloomRatios((p) => ({ ...p, UNDERSTAND: v }))}
-              colorClass={BLOOM_COLORS.UNDERSTAND}
-            />
-            <RatioInput
-              label="Vận dụng"
-              value={bloomRatios.APPLY}
-              onChange={(v) => setBloomRatios((p) => ({ ...p, APPLY: v }))}
-              colorClass={BLOOM_COLORS.APPLY}
-            />
-          </div>
-
-          {/* Type ratios */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-slate-700">
-                Tỷ lệ loại câu hỏi
-              </label>
-              <SumBadge sum={typeSum} label="Tổng" />
-            </div>
-            <RatioInput
-              label="1 đáp án"
-              value={typeRatios.SINGLE_CHOICE}
-              onChange={(v) =>
-                setTypeRatios((p) => ({ ...p, SINGLE_CHOICE: v }))
-              }
-            />
-            <RatioInput
-              label="Nhiều đáp án"
-              value={typeRatios.MULTIPLE_CHOICE}
-              onChange={(v) =>
-                setTypeRatios((p) => ({ ...p, MULTIPLE_CHOICE: v }))
-              }
-            />
-            <RatioInput
-              label="Đúng/Sai"
-              value={typeRatios.TRUE_FALSE}
-              onChange={(v) =>
-                setTypeRatios((p) => ({ ...p, TRUE_FALSE: v }))
-              }
-            />
-          </div>
-        </div>
-
-        {/* Preview + Generate buttons */}
-        <div className="flex gap-3">
+        {/* Tab Navigation */}
+        <div className="flex border-b border-slate-200">
           <button
-            onClick={handlePreview}
-            disabled={!canSubmit || previewLoading}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-purple-300 text-purple-700 text-sm font-medium hover:bg-purple-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+            onClick={() => setActiveTab("matrix")}
+            className={`flex items-center gap-2 py-3 px-4 font-semibold text-sm border-b-2 transition ${
+              activeTab === "matrix"
+                ? "border-purple-600 text-purple-600"
+                : "border-transparent text-slate-500 hover:text-slate-700"
+            }`}
           >
-            {previewLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Eye className="w-4 h-4" />
-            )}
-            Xem trước phân bổ
+            <SlidersHorizontal className="w-4 h-4" />
+            Cấu hình Ma trận Bloom
           </button>
-
           <button
-            onClick={handleGenerate}
-            disabled={!canSubmit || genLoading}
-            className="flex items-center gap-2 px-5 py-2 rounded-lg bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed transition shadow"
+            onClick={() => setActiveTab("document")}
+            className={`flex items-center gap-2 py-3 px-4 font-semibold text-sm border-b-2 transition ${
+              activeTab === "document"
+                ? "border-purple-600 text-purple-600"
+                : "border-transparent text-slate-500 hover:text-slate-700"
+            }`}
           >
-            {genLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Zap className="w-4 h-4" />
-            )}
-            {genLoading ? "Đang sinh câu hỏi…" : "Sinh câu hỏi bằng AI"}
+            <FileText className="w-4 h-4" />
+            Sinh từ Tài liệu & Giáo trình
           </button>
         </div>
 
-        {/* Error */}
-        {genError && (
-          <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-            <AlertCircle className="w-4 h-4 flex-shrink-0" />
-            {genError}
+        {/* ================= TAB 1: MA TRẬN BLOOM ================= */}
+        {activeTab === "matrix" && (
+          <div className="space-y-6">
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6 space-y-6">
+              <div className="flex items-center gap-2 text-slate-700 font-semibold">
+                <Settings2 className="w-4 h-4 text-purple-500" />
+                Thông số ma trận đề thi
+              </div>
+
+              {/* Topic */}
+              <div className="space-y-1.5">
+                <label className="block text-sm font-medium text-slate-700">
+                  Chủ đề <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value)}
+                  placeholder="VD: Lập trình hướng đối tượng trong Python"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+                />
+              </div>
+
+              {/* Total questions */}
+              <div className="space-y-1.5">
+                <label className="block text-sm font-medium text-slate-700">
+                  Tổng số câu hỏi <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={totalQuestions}
+                  onChange={(e) =>
+                    setTotalQuestions(clamp(Number(e.target.value), 1, 50))
+                  }
+                  className="w-28 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+                />
+              </div>
+
+              {/* Bloom ratios */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-slate-700">
+                    Tỷ lệ nhận thức Bloom
+                  </label>
+                  <SumBadge sum={bloomSum} label="Tổng" />
+                </div>
+                <RatioInput
+                  label="Nhận biết"
+                  value={bloomRatios.REMEMBER}
+                  onChange={(v) => setBloomRatios((p) => ({ ...p, REMEMBER: v }))}
+                  colorClass={BLOOM_COLORS.REMEMBER}
+                />
+                <RatioInput
+                  label="Thông hiểu"
+                  value={bloomRatios.UNDERSTAND}
+                  onChange={(v) => setBloomRatios((p) => ({ ...p, UNDERSTAND: v }))}
+                  colorClass={BLOOM_COLORS.UNDERSTAND}
+                />
+                <RatioInput
+                  label="Vận dụng"
+                  value={bloomRatios.APPLY}
+                  onChange={(v) => setBloomRatios((p) => ({ ...p, APPLY: v }))}
+                  colorClass={BLOOM_COLORS.APPLY}
+                />
+              </div>
+
+              {/* Type ratios */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-slate-700">
+                    Tỷ lệ loại câu hỏi
+                  </label>
+                  <SumBadge sum={typeSum} label="Tổng" />
+                </div>
+                <RatioInput
+                  label="1 đáp án"
+                  value={typeRatios.SINGLE_CHOICE}
+                  onChange={(v) =>
+                    setTypeRatios((p) => ({ ...p, SINGLE_CHOICE: v }))
+                  }
+                />
+                <RatioInput
+                  label="Nhiều đáp án"
+                  value={typeRatios.MULTIPLE_CHOICE}
+                  onChange={(v) =>
+                    setTypeRatios((p) => ({ ...p, MULTIPLE_CHOICE: v }))
+                  }
+                />
+                <RatioInput
+                  label="Đúng/Sai"
+                  value={typeRatios.TRUE_FALSE}
+                  onChange={(v) =>
+                    setTypeRatios((p) => ({ ...p, TRUE_FALSE: v }))
+                  }
+                />
+              </div>
+            </div>
+
+            {/* Preview + Generate buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={handlePreview}
+                disabled={!canSubmitMatrix || previewLoading}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-purple-300 text-purple-700 text-sm font-medium hover:bg-purple-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                {previewLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
+                Xem trước phân bổ
+              </button>
+
+              <button
+                onClick={handleGenerate}
+                disabled={!canSubmitMatrix || genLoading}
+                className="flex items-center gap-2 px-5 py-2 rounded-lg bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed transition shadow"
+              >
+                {genLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Zap className="w-4 h-4" />
+                )}
+                {genLoading ? "Đang sinh câu hỏi…" : "Sinh câu hỏi bằng AI"}
+              </button>
+            </div>
+
+            {/* Error */}
+            {genError && (
+              <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                {genError}
+              </div>
+            )}
+
+            {/* Preview table */}
+            {preview && (
+              <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5 space-y-3">
+                <p className="font-semibold text-slate-700 text-sm flex items-center gap-2">
+                  <Eye className="w-4 h-4 text-purple-500" />
+                  Phân bổ ma trận — {preview.topic} ({preview.total_questions} câu)
+                </p>
+                {previewError && (
+                  <p className="text-xs text-red-500">{previewError}</p>
+                )}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50">
+                        <th className="border border-slate-200 px-3 py-2 text-left text-slate-600">
+                          Nhận thức ↓ / Loại →
+                        </th>
+                        <th className="border border-slate-200 px-3 py-2 text-center text-slate-600">
+                          1 đáp án
+                        </th>
+                        <th className="border border-slate-200 px-3 py-2 text-center text-slate-600">
+                          Nhiều đáp án
+                        </th>
+                        <th className="border border-slate-200 px-3 py-2 text-center text-slate-600">
+                          Đúng/Sai
+                        </th>
+                        <th className="border border-slate-200 px-3 py-2 text-center font-semibold text-slate-700">
+                          Tổng
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(["REMEMBER", "UNDERSTAND", "APPLY"] as const).map((level) => {
+                        const rowAllocations = preview.allocations.filter(
+                          (a) => a.cognitive_level === level,
+                        );
+                        const getCount = (type: string) =>
+                          rowAllocations.find((a) => a.question_type === type)?.count ?? 0;
+                        const rowTotal = rowAllocations.reduce(
+                          (s, a) => s + a.count,
+                          0,
+                        );
+                        return (
+                          <tr key={level}>
+                            <td className="border border-slate-200 px-3 py-2">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-xs font-medium ${BLOOM_COLORS[level]}`}
+                              >
+                                {BLOOM_LABELS[level]}
+                              </span>
+                            </td>
+                            {["SINGLE_CHOICE", "MULTIPLE_CHOICE", "TRUE_FALSE"].map(
+                              (type) => (
+                                <td
+                                  key={type}
+                                  className="border border-slate-200 px-3 py-2 text-center text-slate-700"
+                                >
+                                  {getCount(type)}
+                                </td>
+                              ),
+                            )}
+                            <td className="border border-slate-200 px-3 py-2 text-center font-semibold text-slate-800">
+                              {rowTotal}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* Preview table */}
-        {preview && (
-          <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5 space-y-3">
-            <p className="font-semibold text-slate-700 text-sm flex items-center gap-2">
-              <Eye className="w-4 h-4 text-purple-500" />
-              Phân bổ ma trận — {preview.topic} ({preview.total_questions} câu)
-            </p>
-            {previewError && (
-              <p className="text-xs text-red-500">{previewError}</p>
-            )}
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-50">
-                    <th className="border border-slate-200 px-3 py-2 text-left text-slate-600">
-                      Nhận thức ↓ / Loại →
-                    </th>
-                    <th className="border border-slate-200 px-3 py-2 text-center text-slate-600">
-                      1 đáp án
-                    </th>
-                    <th className="border border-slate-200 px-3 py-2 text-center text-slate-600">
-                      Nhiều đáp án
-                    </th>
-                    <th className="border border-slate-200 px-3 py-2 text-center text-slate-600">
-                      Đúng/Sai
-                    </th>
-                    <th className="border border-slate-200 px-3 py-2 text-center font-semibold text-slate-700">
-                      Tổng
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(["REMEMBER", "UNDERSTAND", "APPLY"] as const).map((level) => {
-                    const rowAllocations = preview.allocations.filter(
-                      (a) => a.cognitive_level === level,
-                    );
-                    const getCount = (type: string) =>
-                      rowAllocations.find((a) => a.question_type === type)?.count ?? 0;
-                    const rowTotal = rowAllocations.reduce(
-                      (s, a) => s + a.count,
-                      0,
-                    );
-                    return (
-                      <tr key={level}>
-                        <td className="border border-slate-200 px-3 py-2">
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-xs font-medium ${BLOOM_COLORS[level]}`}
-                          >
-                            {BLOOM_LABELS[level]}
-                          </span>
-                        </td>
-                        {["SINGLE_CHOICE", "MULTIPLE_CHOICE", "TRUE_FALSE"].map(
-                          (type) => (
-                            <td
-                              key={type}
-                              className="border border-slate-200 px-3 py-2 text-center text-slate-700"
-                            >
-                              {getCount(type)}
-                            </td>
-                          ),
-                        )}
-                        <td className="border border-slate-200 px-3 py-2 text-center font-semibold text-slate-800">
-                          {rowTotal}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+        {/* ================= TAB 2: SINH TỪ TÀI LIỆU (Issue #33) ================= */}
+        {activeTab === "document" && (
+          <div className="space-y-6">
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6 space-y-6">
+              <div className="flex items-center gap-2 text-slate-700 font-semibold">
+                <FileText className="w-4 h-4 text-purple-500" />
+                Tài liệu & Ngữ cảnh bài giảng
+              </div>
+
+              {/* Upload Dropzone */}
+              <div className="border-2 border-dashed border-slate-200 rounded-xl p-5 text-center bg-slate-50/50 hover:bg-slate-50 transition">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.docx,.txt"
+                  onChange={handleFileChange}
+                  className="hidden"
+                  id="doc-upload-input"
+                />
+                <label
+                  htmlFor="doc-upload-input"
+                  className="cursor-pointer flex flex-col items-center gap-2"
+                >
+                  <div className="p-2.5 bg-purple-100 text-purple-600 rounded-full">
+                    {uploadLoading ? (
+                      <Loader2 className="w-6 h-6 animate-spin" />
+                    ) : (
+                      <UploadCloud className="w-6 h-6" />
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-sm font-semibold text-purple-700 hover:underline">
+                      Tải lên tệp tài liệu
+                    </span>{" "}
+                    <span className="text-sm text-slate-500">
+                      hoặc dán trực tiếp nội dung bên dưới
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    Hỗ trợ định dạng .PDF, .DOCX, .TXT (Tối đa 10MB)
+                  </p>
+                </label>
+
+                {uploadedFileName && (
+                  <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 bg-green-50 border border-green-200 text-green-700 text-xs rounded-full">
+                    <FileCheck className="w-3.5 h-3.5" />
+                    Đã nạp: <strong>{uploadedFileName}</strong>
+                  </div>
+                )}
+              </div>
+
+              {uploadError && (
+                <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  {uploadError}
+                </div>
+              )}
+
+              {/* Raw Text Area */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-sm font-medium text-slate-700">
+                    Nội dung văn bản / Giáo trình <span className="text-red-500">*</span>
+                  </label>
+                  <span className="text-xs text-slate-400">
+                    {rawText.length} ký tự — {rawText.trim() ? rawText.trim().split(/\s+/).length : 0} từ
+                  </span>
+                </div>
+                <textarea
+                  value={rawText}
+                  onChange={(e) => setRawText(e.target.value)}
+                  rows={6}
+                  placeholder="Dán nội dung bài giảng, tóm tắt chương học, hoặc trích đoạn tài liệu cần sinh câu hỏi trắc nghiệm tại đây..."
+                  className="w-full border border-slate-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 font-mono text-slate-800"
+                />
+              </div>
+
+              {/* Topic override */}
+              <div className="space-y-1.5">
+                <label className="block text-sm font-medium text-slate-700">
+                  Tên chủ đề / Chuyên đề (Tuỳ chọn)
+                </label>
+                <input
+                  type="text"
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value)}
+                  placeholder="VD: Chương 4 - Tầng Giao vận và Giao thức TCP/UDP (mặc định lấy theo tài liệu)"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+                />
+              </div>
+
+              {/* Total questions */}
+              <div className="space-y-1.5">
+                <label className="block text-sm font-medium text-slate-700">
+                  Tổng số câu hỏi cần sinh <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={totalQuestions}
+                  onChange={(e) =>
+                    setTotalQuestions(clamp(Number(e.target.value), 1, 50))
+                  }
+                  className="w-28 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+                />
+              </div>
+
+              {/* Bloom ratios */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-slate-700">
+                    Tỷ lệ nhận thức Bloom
+                  </label>
+                  <SumBadge sum={bloomSum} label="Tổng" />
+                </div>
+                <RatioInput
+                  label="Nhận biết"
+                  value={bloomRatios.REMEMBER}
+                  onChange={(v) => setBloomRatios((p) => ({ ...p, REMEMBER: v }))}
+                  colorClass={BLOOM_COLORS.REMEMBER}
+                />
+                <RatioInput
+                  label="Thông hiểu"
+                  value={bloomRatios.UNDERSTAND}
+                  onChange={(v) => setBloomRatios((p) => ({ ...p, UNDERSTAND: v }))}
+                  colorClass={BLOOM_COLORS.UNDERSTAND}
+                />
+                <RatioInput
+                  label="Vận dụng"
+                  value={bloomRatios.APPLY}
+                  onChange={(v) => setBloomRatios((p) => ({ ...p, APPLY: v }))}
+                  colorClass={BLOOM_COLORS.APPLY}
+                />
+              </div>
+
+              {/* Type ratios */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-slate-700">
+                    Tỷ lệ loại câu hỏi
+                  </label>
+                  <SumBadge sum={typeSum} label="Tổng" />
+                </div>
+                <RatioInput
+                  label="1 đáp án"
+                  value={typeRatios.SINGLE_CHOICE}
+                  onChange={(v) =>
+                    setTypeRatios((p) => ({ ...p, SINGLE_CHOICE: v }))
+                  }
+                />
+                <RatioInput
+                  label="Nhiều đáp án"
+                  value={typeRatios.MULTIPLE_CHOICE}
+                  onChange={(v) =>
+                    setTypeRatios((p) => ({ ...p, MULTIPLE_CHOICE: v }))
+                  }
+                />
+                <RatioInput
+                  label="Đúng/Sai"
+                  value={typeRatios.TRUE_FALSE}
+                  onChange={(v) =>
+                    setTypeRatios((p) => ({ ...p, TRUE_FALSE: v }))
+                  }
+                />
+              </div>
+
+              {/* Advanced chunking toggle */}
+              <div className="border-t border-slate-100 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced((p) => !p)}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900"
+                >
+                  <Settings2 className="w-3.5 h-3.5" />
+                  {showAdvanced ? "Ẩn cấu hình phân đoạn (Chunking)" : "Tùy chỉnh thuật toán phân đoạn (Sliding Window)"}
+                </button>
+
+                {showAdvanced && (
+                  <div className="mt-3 p-4 bg-slate-50 border border-slate-200 rounded-lg space-y-3 text-xs">
+                    <p className="text-slate-600">
+                      Hệ thống tự động chia văn bản thành các cửa sổ trượt (Sliding Window Chunking) để giữ mạch ngữ cảnh tự nhiên.
+                    </p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="font-medium text-slate-700 block mb-1">
+                          Kích thước đoạn (Chunk size - ký tự):
+                        </label>
+                        <input
+                          type="number"
+                          min={300}
+                          max={8000}
+                          step={100}
+                          value={chunkSize}
+                          onChange={(e) => setChunkSize(Number(e.target.value))}
+                          className="w-full border border-slate-200 rounded px-2.5 py-1.5 bg-white text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="font-medium text-slate-700 block mb-1">
+                          Độ gối đầu (Overlap - ký tự):
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={chunkSize - 50}
+                          step={50}
+                          value={overlap}
+                          onChange={(e) => setOverlap(Number(e.target.value))}
+                          className="w-full border border-slate-200 rounded px-2.5 py-1.5 bg-white text-sm"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
+
+            {/* Generate from document button */}
+            <div className="flex gap-3">
+              <button
+                onClick={handleGenerateFromDoc}
+                disabled={!canSubmitDocument || genLoading}
+                className="flex items-center gap-2 px-6 py-2.5 rounded-lg bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed transition shadow"
+              >
+                {genLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Zap className="w-4 h-4" />
+                )}
+                {genLoading ? "Đang phân đoạn và sinh câu hỏi…" : "Sinh câu hỏi từ tài liệu"}
+              </button>
+            </div>
+
+            {/* Error */}
+            {genError && (
+              <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                {genError}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -673,9 +1040,19 @@ export const AiGenPage: React.FC = () => {
             <h1 className="text-2xl font-bold text-slate-800">
               Duyệt câu hỏi AI
             </h1>
-            <p className="text-sm text-slate-500">
-              Chủ đề: <strong>{topic}</strong> — {questions.length} câu được sinh
-            </p>
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <span>Chủ đề: <strong>{topic || "Tài liệu học tập"}</strong></span>
+              <span>•</span>
+              <span>{questions.length} câu đã sinh</span>
+              {chunksInfo && (
+                <>
+                  <span>•</span>
+                  <span className="text-purple-600 font-medium bg-purple-50 px-2 py-0.5 rounded-full text-xs">
+                    {chunksInfo.used}/{chunksInfo.total} đoạn ngữ cảnh (Sliding Window)
+                  </span>
+                </>
+              )}
+            </div>
           </div>
         </div>
         <button
