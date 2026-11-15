@@ -3,7 +3,7 @@
 from typing import Any, Dict, List, Literal, Optional
 import uuid
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
 
 from app.models.entities import (
     CognitiveLevel,
@@ -159,27 +159,107 @@ class GenerateByMatrixRequest(BaseModel):
 class LLMGeneratedOptionSchema(BaseModel):
     """Option structure expected from the LLM JSON output."""
 
-    id: str
-    text: str
-    is_correct: bool
+    id: str = Field(default="", validation_alias=AliasChoices("id", "label", "key"))
+    text: str = Field(validation_alias=AliasChoices("text", "content", "value"))
+    is_correct: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "is_correct", "isCorrect", "correct", "is_answer", "correctAnswer"
+        ),
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_raw_option(cls, data: Any) -> Any:
+        if isinstance(data, str):
+            return {"id": "", "text": data, "is_correct": False}
+        return data
 
 
 class LLMGeneratedQuestionSchema(BaseModel):
     """Single question item expected from the LLM JSON output."""
 
-    content: str
-    question_type: QuestionType
-    cognitive_level: CognitiveLevel
-    level: Optional[QuestionLevel] = None
+    content: str = Field(validation_alias=AliasChoices("content", "question", "stem"))
+    question_type: QuestionType = Field(
+        default=QuestionType.SINGLE_CHOICE,
+        validation_alias=AliasChoices("question_type", "type"),
+    )
+    cognitive_level: CognitiveLevel = Field(
+        default=CognitiveLevel.REMEMBER,
+        validation_alias=AliasChoices("cognitive_level", "bloom_level", "cognitiveLevel"),
+    )
+    level: Optional[QuestionLevel] = Field(
+        default=None,
+        validation_alias=AliasChoices("level", "difficulty"),
+    )
     options: List[LLMGeneratedOptionSchema]
-    explanation: str = ""
+    explanation: str = Field(default="", validation_alias=AliasChoices("explanation", "explain"))
     tags: List[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_question_data(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+
+        # Handle difficulty mapping if provided as string e.g. "EASY", "easy", "Medium"
+        if "difficulty" in data and "level" not in data:
+            data["level"] = str(data["difficulty"]).strip().upper()
+
+        raw_options = data.get("options")
+        correct_answer = data.get("correctAnswer") or data.get("correct_answer")
+        labels = ("A", "B", "C", "D", "E", "F", "G", "H")
+
+        if isinstance(raw_options, list) and raw_options and all(isinstance(opt, str) for opt in raw_options):
+            normalized_opts = []
+            for idx, opt_text in enumerate(raw_options):
+                lbl = labels[idx] if idx < len(labels) else str(idx + 1)
+                is_corr = False
+                if correct_answer is not None:
+                    ca_str = str(correct_answer).strip().upper()
+                    if ca_str == lbl or ca_str == opt_text.strip().upper():
+                        is_corr = True
+                normalized_opts.append({"id": lbl, "text": opt_text, "is_correct": is_corr})
+            data["options"] = normalized_opts
+        elif isinstance(raw_options, list):
+            for idx, opt in enumerate(raw_options):
+                if isinstance(opt, dict) and not opt.get("id"):
+                    opt["id"] = labels[idx] if idx < len(labels) else str(idx + 1)
+
+        return data
+
+    @property
+    def question(self) -> str:
+        """Alias for content matching Issue #10 Acceptance Criteria."""
+        return self.content
+
+    @property
+    def difficulty(self) -> Optional[str]:
+        """Alias for level matching Issue #10 Acceptance Criteria."""
+        return self.level.value if self.level else None
+
+    @property
+    def correctAnswer(self) -> str:
+        """Labels of correct options matching Issue #10 Acceptance Criteria."""
+        correct = [opt.id for opt in self.options if opt.is_correct]
+        return ", ".join(correct) if correct else ""
 
 
 class LLMGeneratedBatchSchema(BaseModel):
     """Batch response schema passed to LLMClientAdapter.generate_structured_json."""
 
     questions: List[LLMGeneratedQuestionSchema]
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_batch(cls, data: Any) -> Any:
+        if isinstance(data, list):
+            return {"questions": data}
+        if isinstance(data, dict) and "questions" not in data:
+            for alt_key in ("data", "items", "results", "quiz", "questions_list"):
+                if alt_key in data and isinstance(data[alt_key], list):
+                    return {"questions": data[alt_key]}
+        return data
 
 
 class GeneratedOptionItem(BaseModel):
@@ -202,6 +282,34 @@ class GeneratedQuestionItem(BaseModel):
     tags: List[str] = Field(default_factory=list)
     explanation: str = Field(min_length=1)
     source_type: QuestionSource = QuestionSource.AI_GENERATED
+
+    @property
+    def question(self) -> str:
+        """Alias for content matching Issue #10 Acceptance Criteria."""
+        return self.content
+
+    @property
+    def difficulty(self) -> str:
+        """Alias for level matching Issue #10 Acceptance Criteria."""
+        return self.level.value
+
+    @property
+    def correctAnswer(self) -> str:
+        """Label(s) of correct option(s) matching Issue #10 Acceptance Criteria."""
+        correct = [opt.id for opt in self.options if opt.is_correct]
+        return ", ".join(correct) if correct else ""
+
+    def to_issue10_dict(self) -> Dict[str, Any]:
+        """Format matching Issue #10 Acceptance Criteria:
+        [{ question, options, correctAnswer, difficulty, explanation }].
+        """
+        return {
+            "question": self.content,
+            "options": [opt.text for opt in self.options],
+            "correctAnswer": self.correctAnswer,
+            "difficulty": self.difficulty,
+            "explanation": self.explanation,
+        }
 
 
 class PromptPlanCellSchema(BaseModel):
