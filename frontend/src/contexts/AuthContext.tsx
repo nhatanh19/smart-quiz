@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useRef, useState, ReactNode } from "react";
 import axios from "axios";
-import { apiClient, authError, logoutSession } from "@/lib/apiClient";
+import { AUTH_REQUEST_TIMEOUT_MS, apiClient, authError, logoutSession } from "@/lib/apiClient";
 import { ApiResponse, User } from "@/types";
 
 interface AuthState {
@@ -27,7 +27,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (checked.current) return Promise.resolve();
     if (pending.current) return pending.current;
     const currentRevision = revision.current;
-    pending.current = apiClient.get<ApiResponse<User>>("/auth/me").then(({ data }) => {
+    pending.current = apiClient.get<ApiResponse<User>>("/auth/me", { timeout: AUTH_REQUEST_TIMEOUT_MS }).then(({ data }) => {
       if (currentRevision !== revision.current) return;
       checked.current = true;
       setState({ user: data.data!, loading: false, error: "" });
