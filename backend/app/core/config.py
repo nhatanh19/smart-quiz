@@ -39,11 +39,12 @@ class Settings(BaseSettings):
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def normalize_database_url(cls, v: str) -> str:
-        """Normalize legacy postgres:// URLs (e.g. Render) for SQLAlchemy 2.0."""
+        """Normalize postgres:// and postgresql:// URLs to use psycopg2 with SQLAlchemy 2.1+."""
         if isinstance(v, str):
             url = v.strip()
-            if url.startswith("postgres://"):
-                return "postgresql+psycopg2://" + url[len("postgres://") :]
+            for prefix in ("postgres://", "postgresql://"):
+                if url.startswith(prefix):
+                    return "postgresql+psycopg2://" + url[len(prefix) :]
             return url
         return v
 
