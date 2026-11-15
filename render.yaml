@@ -2,7 +2,6 @@
 databases:
   - name: smart-quiz-db
     databaseName: smart_quiz
-    user: postgres
     region: singapore
     plan: free
 
