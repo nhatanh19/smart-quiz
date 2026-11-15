@@ -8,6 +8,7 @@ import {
   Plus,
   Settings2,
   Trash2,
+  UploadCloud,
   X,
 } from "lucide-react";
 import type {
@@ -35,6 +36,7 @@ import {
   FilterToolbar,
   QuestionTable,
 } from "@/pages/parser/QuestionBankControls";
+import { DocumentParserTab } from "@/pages/parser/DocumentParserTab";
 
 const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: "SINGLE_CHOICE", label: "Một đáp án đúng" },
@@ -115,6 +117,7 @@ function initialForm(question?: Question | null): QuestionForm {
 }
 
 export const ParserPlaceholder: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<"parser" | "question_bank">("parser");
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -479,7 +482,39 @@ export const ParserPlaceholder: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <section className="overflow-hidden rounded-2xl bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 p-6 text-white shadow-lg sm:p-8">
+      {/* Dual Tab Navigation */}
+      <div className="flex border-b border-slate-200 bg-white px-2 rounded-xl shadow-sm">
+        <button
+          type="button"
+          onClick={() => setActiveTab("parser")}
+          className={`flex items-center gap-2 px-5 py-3.5 text-sm font-semibold border-b-2 transition -mb-px ${
+            activeTab === "parser"
+              ? "border-indigo-600 text-indigo-600 bg-indigo-50/50"
+              : "border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300"
+          }`}
+        >
+          <UploadCloud className="h-4 w-4" />
+          Tải lên & Bóc tách tài liệu
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("question_bank")}
+          className={`flex items-center gap-2 px-5 py-3.5 text-sm font-semibold border-b-2 transition -mb-px ${
+            activeTab === "question_bank"
+              ? "border-indigo-600 text-indigo-600 bg-indigo-50/50"
+              : "border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300"
+          }`}
+        >
+          <BookOpen className="h-4 w-4" />
+          Ngân hàng câu hỏi
+        </button>
+      </div>
+
+      {activeTab === "parser" ? (
+        <DocumentParserTab />
+      ) : (
+        <>
+          <section className="overflow-hidden rounded-2xl bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 p-6 text-white shadow-lg sm:p-8">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
           <div className="max-w-2xl">
             <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium text-indigo-100">
@@ -831,6 +866,8 @@ export const ParserPlaceholder: React.FC = () => {
             </form>
           </section>
         </div>
+      )}
+        </>
       )}
     </div>
   );

@@ -158,7 +158,12 @@ def test_management_api_role_matrix(client, session, path, role, expected):
         session.flush()
         # The database role is authoritative even if the JWT claims ADMIN.
         headers["Authorization"] = "Bearer " + create_access_token({"sub": str(user.id), "role": "ADMIN"})
-    assert client.post(path, headers=headers).status_code == expected
+    kwargs = (
+        {"files": {"file": ("rbac.txt", b"rbac smoke check", "text/plain")}}
+        if path == "/api/v1/parser/upload"
+        else {}
+    )
+    assert client.post(path, headers=headers, **kwargs).status_code == expected
 
 
 @pytest.mark.parametrize("role", ["STUDENT", "INSTRUCTOR", "ADMIN"])
