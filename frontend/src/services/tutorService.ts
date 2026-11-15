@@ -280,7 +280,6 @@ export const tutorService = {
   },
 
   /**
-<<<<<<< HEAD
    * Get student learning progress and topic mastery analytics (Issue #36, WBS 5.3.1).
    */
   async getStudentAnalytics(studentId: string = "me"): Promise<StudentAnalyticsData> {

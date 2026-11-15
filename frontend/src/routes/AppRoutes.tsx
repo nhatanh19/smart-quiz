@@ -66,6 +66,7 @@ export const AppRoutes: React.FC = () => {
           <Route element={<ProtectedRoute allowedRoles={["STUDENT"]} />}>
             <Route path="/exam/join" element={<JoinExam />} />
             <Route path="/exam/lobby/:examId" element={<ExamLobby />} />
+            <Route path="/student/analytics" element={<AnalyticsPlaceholder />} />
           </Route>
           {/* Post-Exam Review Mode Interface (Issue #15, WBS 5.1.2): all authenticated roles; API enforces ownership */}
           <Route path="/review" element={<ReviewExamView />} />

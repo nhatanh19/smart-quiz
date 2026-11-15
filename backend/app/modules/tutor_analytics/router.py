@@ -454,8 +454,6 @@ def export_exam_scores_csv(
         )
 
     output = io.StringIO()
-    # Write UTF-8 BOM for Microsoft Excel compatibility
-    output.write("\ufeff")
     writer = csv.writer(output)
 
     writer.writerow(["Mã đề thi", data.get("exam_code", "")])

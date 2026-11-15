@@ -553,7 +553,11 @@ def test_exam_csv_export(client, seed_data):
     assert resp.status_code == 200
     assert "text/csv" in resp.headers["content-type"]
     assert "attachment" in resp.headers["content-disposition"]
+    # Verify exactly one UTF-8 BOM, not duplicated
+    assert resp.content.startswith(b"\xef\xbb\xbf")
+    assert not resp.content.startswith(b"\xef\xbb\xbf\xef\xbb\xbf")
     content = resp.content.decode("utf-8-sig")
+    assert content.startswith("Mã đề thi")
     assert "Mã đề thi" in content
     assert exam.exam_code in content
     assert "Lê Thị C" in content

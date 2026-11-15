@@ -26,6 +26,12 @@ export const AnalyticsPlaceholder: React.FC = () => {
     "LECTURER" | "STUDENT" | "TUTOR_REVIEW" | "ROADMAP"
   >(isStudent ? "STUDENT" : "LECTURER");
 
+  React.useEffect(() => {
+    if (isStudent && activeTab === "LECTURER") {
+      setActiveTab("STUDENT");
+    }
+  }, [isStudent, activeTab]);
+
   return (
     <div className="space-y-6">
       {/* Top Header & Tab Navigation */}
@@ -52,18 +58,20 @@ export const AnalyticsPlaceholder: React.FC = () => {
 
         {/* Navigation Tabs */}
         <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1.5 rounded-xl border border-slate-200 text-xs font-medium self-start md:self-auto">
-          {/* Lecturer Tab */}
-          <button
-            onClick={() => setActiveTab("LECTURER")}
-            className={`px-3 py-2 rounded-lg transition-all flex items-center gap-1.5 ${
-              activeTab === "LECTURER"
-                ? "bg-white text-blue-700 font-semibold shadow-xs"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            <Users className="h-4 w-4 text-blue-600" />
-            <span>Phổ điểm Giảng viên</span>
-          </button>
+          {/* Lecturer Tab (Ẩn đối với Sinh viên để tránh gọi nhầm API của giảng viên) */}
+          {!isStudent && (
+            <button
+              onClick={() => setActiveTab("LECTURER")}
+              className={`px-3 py-2 rounded-lg transition-all flex items-center gap-1.5 ${
+                activeTab === "LECTURER"
+                  ? "bg-white text-blue-700 font-semibold shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Users className="h-4 w-4 text-blue-600" />
+              <span>Phổ điểm Giảng viên</span>
+            </button>
+          )}
 
           {/* Student Tab */}
           <button
@@ -107,7 +115,7 @@ export const AnalyticsPlaceholder: React.FC = () => {
       </div>
 
       {/* Tab 1: Lecturer Exam Distribution Dashboard (Issue #36 / WBS 5.3.2) */}
-      {activeTab === "LECTURER" && <LecturerAnalyticsDashboard />}
+      {!isStudent && activeTab === "LECTURER" && <LecturerAnalyticsDashboard />}
 
       {/* Tab 2: Student Progress & Topic Mastery Dashboard (Issue #36 / WBS 5.3.1) */}
       {activeTab === "STUDENT" && <StudentAnalyticsDashboard />}
