@@ -333,12 +333,6 @@ export const ReviewExamView: React.FC<ReviewExamViewProps> = ({ attemptId: propA
               <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
                 Chế độ xem lại (Review Mode)
               </span>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
-                WBS 5.1.2 • Issue #15
-              </span>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
-                WBS 5.2.2 • Issue #17
-              </span>
               {!effectiveAttemptId && (
                 <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-100 text-amber-800 border border-amber-200">
                   Dữ liệu xem trước (Preview)

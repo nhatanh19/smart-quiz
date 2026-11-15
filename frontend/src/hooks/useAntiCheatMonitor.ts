@@ -35,6 +35,8 @@ export function useAntiCheatMonitor(options: Options) {
   useEffect(() => {
     if (!options.enabled || !options.attemptId) return;
     let active = true;
+    let unloading = false;
+    let unloadResetTimer: ReturnType<typeof setTimeout> | undefined;
     let lastFocusEvent = -Infinity;
     const queue: ViolationPayload[] = [];
     let sending = false;
@@ -73,6 +75,8 @@ export function useAntiCheatMonitor(options: Options) {
 
     function report(event_type: ViolationType, source: string) {
       if (stopped || !active || latest.current.paused) return;
+      // Ignore blur/visibility transitions triggered by an intentional F5/reload navigation.
+      if (unloading && (event_type === "TAB_SWITCH" || event_type === "WINDOW_BLUR")) return;
       if (event_type === "TAB_SWITCH" || event_type === "WINDOW_BLUR") {
         const timestamp = performance.now();
         if (timestamp - lastFocusEvent < FOCUS_MERGE_MS) return;
@@ -103,8 +107,15 @@ export function useAntiCheatMonitor(options: Options) {
       if (!event.repeat) report(devtools ? "DEVTOOLS_SHORTCUT" : "COPY_PASTE_ATTEMPT", event.key);
     };
     const online = () => { void drain(); };
+    const markUnloading = () => {
+      unloading = true;
+      if (unloadResetTimer) clearTimeout(unloadResetTimer);
+      unloadResetTimer = setTimeout(() => { unloading = false; }, 1500);
+    };
     document.addEventListener("visibilitychange", visibility);
     window.addEventListener("blur", blur);
+    window.addEventListener("beforeunload", markUnloading);
+    window.addEventListener("pagehide", markUnloading);
     document.addEventListener("keydown", keydown, true);
     for (const type of ["copy", "paste", "cut", "contextmenu"]) document.addEventListener(type, clipboard, true);
     window.addEventListener("online", online);
@@ -112,8 +123,11 @@ export function useAntiCheatMonitor(options: Options) {
       active = false;
       if (retry) clearTimeout(retry);
       if (noticeTimer) clearTimeout(noticeTimer);
+      if (unloadResetTimer) clearTimeout(unloadResetTimer);
       document.removeEventListener("visibilitychange", visibility);
       window.removeEventListener("blur", blur);
+      window.removeEventListener("beforeunload", markUnloading);
+      window.removeEventListener("pagehide", markUnloading);
       document.removeEventListener("keydown", keydown, true);
       for (const type of ["copy", "paste", "cut", "contextmenu"]) document.removeEventListener(type, clipboard, true);
       window.removeEventListener("online", online);

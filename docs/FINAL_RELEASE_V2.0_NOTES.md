@@ -1,7 +1,7 @@
 # 🚀 Smart Quiz v2.0.0-final — Release Notes
 
 > **Phiên bản:** `v2.0.0-final`  
-> **Milestone:** Sprint 2: Realtime & Intelligence (Đóng Milestone)  
+> **Milestone:** Sprint 2: Realtime & Intelligence  
 > **Ngày phát hành:** 15/11/2026  
 > **Mã nguồn:** [GitHub Release v2.0.0-final](https://github.com/nhatanh19/smart-quiz/releases/tag/v2.0.0-final)
 
@@ -48,8 +48,8 @@ Bản phát hành `v2.0.0-final` đánh dấu sự hoàn thiện toàn diện c�
 
 ## 📈 Kết quả Kiểm thử Tổng hợp
 
-- **Backend Pytest:** 235 passed, 4 skipped (100% Core + Analytics).
-- **Frontend Vitest:** 64 passed (6 Test Suites).
+- **Backend Pytest:** 274 passed, 0 skipped (PostgreSQL) / 270 passed, 4 skipped (SQLite).
+- **Frontend Vitest:** 89 passed (8 Test Suites).
 - **TypeScript & Vite Build:** Hoàn tất thành công không lỗi (0 error).
 - **E2E Smoke Testing:** Toàn bộ 6 kịch bản nghiệp vụ khép kín đạt kết quả PASS.
 

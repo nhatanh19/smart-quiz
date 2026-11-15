@@ -56,7 +56,7 @@ export const StudentAnalyticsDashboard: React.FC<StudentAnalyticsDashboardProps>
               Tiến độ Học tập & Mức độ Nắm vững Chuyên đề
             </h2>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
-              Dành cho Sinh viên (Issue #36)
+              Dành cho Sinh viên
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1">
