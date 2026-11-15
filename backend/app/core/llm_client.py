@@ -1,10 +1,11 @@
 import json
 import logging
 from typing import Optional, Type, TypeVar
-from openai import AsyncOpenAI, APIConnectionError, RateLimitError, APIStatusError
+from openai import AsyncOpenAI, APIConnectionError, APIStatusError, RateLimitError
 from pydantic import BaseModel, ValidationError
 from tenacity import (
     retry,
+    retry_if_exception,
     stop_after_attempt,
     wait_exponential,
     retry_if_exception_type,
@@ -16,6 +17,24 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
+
+
+class LLMConfigurationError(RuntimeError):
+    """Raised when the LLM provider is not configured."""
+
+
+class LLMRateLimitError(RuntimeError):
+    """Raised when the provider remains rate-limited after retries."""
+
+
+class LLMResponseError(RuntimeError):
+    """Raised when the provider returns no usable response."""
+
+
+def _is_retryable_status_error(error: BaseException) -> bool:
+    return isinstance(error, APIStatusError) and (
+        error.status_code in (408, 409) or error.status_code >= 500
+    )
 
 
 class LLMClientAdapter:
@@ -32,24 +51,32 @@ class LLMClientAdapter:
         model_name: Optional[str] = None,
         timeout_seconds: Optional[float] = None,
     ):
-        self.api_key = api_key or settings.LLM_API_KEY or "dummy-api-key"
-        self.base_url = base_url or settings.LLM_BASE_URL
-        self.model_name = model_name or settings.LLM_MODEL_NAME
-        self.timeout = timeout_seconds or settings.LLM_TIMEOUT_SECONDS
-
-        self.client = AsyncOpenAI(
-            api_key=self.api_key,
-            base_url=self.base_url,
-            timeout=self.timeout,
+        self.api_key = settings.LLM_API_KEY if api_key is None else api_key
+        self.base_url = settings.LLM_BASE_URL if base_url is None else base_url
+        self.model_name = settings.LLM_MODEL_NAME if model_name is None else model_name
+        self.timeout = (
+            settings.LLM_TIMEOUT_SECONDS
+            if timeout_seconds is None
+            else timeout_seconds
         )
+        if self.timeout <= 0:
+            raise ValueError("timeout_seconds must be greater than zero")
 
-    @retry(
-        reraise=True,
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type((APIConnectionError, RateLimitError)),
-        before_sleep=before_sleep_log(logger, logging.WARNING),
-    )
+        self.client: Optional[AsyncOpenAI] = None
+
+    def _get_client(self) -> AsyncOpenAI:
+        if not self.api_key:
+            raise LLMConfigurationError(
+                "The AI service is not configured. Please contact support."
+            )
+        if self.client is None:
+            self.client = AsyncOpenAI(
+                api_key=self.api_key,
+                base_url=self.base_url,
+                timeout=self.timeout,
+            )
+        return self.client
+
     async def generate_structured_json(
         self,
         system_prompt: str,
@@ -57,22 +84,36 @@ class LLMClientAdapter:
         response_schema: Type[T],
         temperature: float = 0.2,
     ) -> T:
-        """Call LLM provider and validate response strictly against a Pydantic BaseModel.
+        """Call an LLM provider and validate its JSON response with a Pydantic model."""
+        self._get_client()
+        try:
+            return await self._generate_with_retry(
+                system_prompt, user_prompt, response_schema, temperature
+            )
+        except RateLimitError as error:
+            logger.error("LLM provider remained rate-limited after three attempts")
+            raise LLMRateLimitError(
+                "The AI service is temporarily busy. Please try again later."
+            ) from error
 
-        Args:
-            system_prompt: Guiding instruction and persona for the LLM.
-            user_prompt: Specific input content or request.
-            response_schema: Subclass of Pydantic BaseModel defining the desired output structure.
-            temperature: Creativity/randomness control (default 0.2 for strict JSON).
-
-        Returns:
-            An instance of response_schema populated with the LLM output.
-
-        Raises:
-            ValidationError: If LLM output fails schema validation.
-            APIStatusError: If LLM API returns an unrecoverable HTTP status.
-        """
-        # Append schema description to system prompt for models that need explicit schema cues
+    @retry(
+        reraise=True,
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=(
+            retry_if_exception_type((APIConnectionError, RateLimitError))
+            | retry_if_exception(_is_retryable_status_error)
+        ),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+    )
+    async def _generate_with_retry(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        response_schema: Type[T],
+        temperature: float = 0.2,
+    ) -> T:
+        """Request JSON and validate it, retrying only transient provider failures."""
         schema_json = json.dumps(response_schema.model_json_schema(), ensure_ascii=False)
         augmented_system_prompt = (
             f"{system_prompt}\n\n"
@@ -82,28 +123,7 @@ class LLMClientAdapter:
         )
 
         try:
-            # First attempt structured parsing using client.beta.chat.completions.parse if supported
-            try:
-                completion = await self.client.beta.chat.completions.parse(
-                    model=self.model_name,
-                    messages=[
-                        {"role": "system", "content": augmented_system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    response_format=response_schema,
-                    temperature=temperature,
-                )
-                if completion.choices and completion.choices[0].message.parsed:
-                    return completion.choices[0].message.parsed
-            except Exception as parse_error:
-                logger.debug(
-                    "Standard beta parse not supported by host (%s), falling back to json_object: %s",
-                    self.base_url,
-                    parse_error,
-                )
-
-            # Fallback to standard chat completions with json_object format
-            response = await self.client.chat.completions.create(
+            response = await self._get_client().chat.completions.create(
                 model=self.model_name,
                 messages=[
                     {"role": "system", "content": augmented_system_prompt},
@@ -113,8 +133,12 @@ class LLMClientAdapter:
                 temperature=temperature,
             )
 
-            raw_content = response.choices[0].message.content or "{}"
-            # Clean possible markdown wrapping if returned despite instructions
+            if not response.choices:
+                raise LLMResponseError("The AI service returned an empty response.")
+
+            raw_content = response.choices[0].message.content
+            if not isinstance(raw_content, str) or not raw_content.strip():
+                raise LLMResponseError("The AI service returned an empty response.")
             cleaned_content = raw_content.strip()
             if cleaned_content.startswith("```json"):
                 cleaned_content = cleaned_content[7:]
@@ -127,15 +151,16 @@ class LLMClientAdapter:
             validated_data = response_schema.model_validate_json(cleaned_content)
             return validated_data
 
-        except ValidationError as ve:
-            logger.error("LLM output validation failed: %s", ve)
-            raise ve
-        except APIStatusError as se:
-            logger.error("LLM API returned status error %s: %s", se.status_code, se.message)
-            raise se
-        except Exception as e:
-            logger.error("Unexpected error in LLMClientAdapter: %s", e)
-            raise e
+        except ValidationError:
+            logger.exception("LLM output validation failed")
+            raise
+        except APIStatusError as error:
+            logger.error(
+                "LLM API returned status error %s: %s",
+                error.status_code,
+                error.message,
+            )
+            raise
 
 
 # Shared singleton instance configured with app settings

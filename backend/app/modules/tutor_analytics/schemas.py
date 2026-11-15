@@ -165,6 +165,48 @@ class ExamReviewResponseSchema(BaseModel):
 
 
 # ==============================================================================
+# ==============================================================================
+# ISSUE #17: KNOWLEDGE GAP DIAGNOSTIC SCHEMAS (WBS 5.2.2)
+# ==============================================================================
+
+
+class WeakTopicItemSchema(BaseModel):
+    """Aggregated weak topic diagnostic entry."""
+
+    topic: str
+    wrong_count: int
+    total_questions: int
+    accuracy_percentage: float
+    question_ids: List[str]
+    cognitive_levels: List[str] = Field(default_factory=list)
+
+
+class ActionableStudyAdviceSchema(BaseModel):
+    """Actionable recommendation for improving performance in weak areas."""
+
+    title: str
+    description: str
+    action_type: str = "PRACTICE_QUIZ"
+    priority: str = "HIGH"
+    resource_hint: Optional[str] = None
+
+
+class KnowledgeGapDiagnosticResponse(BaseModel):
+    """Knowledge Gap Diagnostic Card response schema."""
+
+    attempt_id: uuid.UUID
+    exam_id: uuid.UUID
+    summary_headline: str
+    primary_weak_topic: Optional[str] = None
+    has_gaps: bool
+    total_wrong: int
+    total_questions: int
+    weak_topics: List[WeakTopicItemSchema]
+    advice: List[ActionableStudyAdviceSchema]
+    generated_at: str
+
+
+# ==============================================================================
 # ISSUE #36: LEARNING ANALYTICS & SCORE DISTRIBUTION DASHBOARD (WBS 5.3)
 # ==============================================================================
 

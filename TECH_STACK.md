@@ -47,7 +47,7 @@ Hệ thống **Smart Quiz** được tổ chức theo mô hình **Standard Monor
 | **CSS Framework** | Tailwind CSS | `^3.4` | Thiết kế giao diện theo mô hình Utility-first CSS, đồng nhất bảng màu, Typography và Responsive. |
 | **UI Component Base** | `shadcn/ui` ecosystem | Latest | Bộ cấu hình UI chuẩn (`components.json`, `index.css` với CSS Variables, `clsx`, `tailwind-merge` và hàm `cn()`). |
 | **Bộ Icon** | `lucide-react` | `^0.350` | Hệ thống biểu tượng giao diện vector chất lượng cao, dung lượng nhẹ. |
-| **HTTP Networking** | Axios | `^1.6` | Client gửi yêu cầu HTTP/REST, cấu hình Base URL linh hoạt và Request Interceptor tự động gắn Bearer JWT Token từ `localStorage`. |
+| **HTTP Networking** | Axios | `^1.6` | Client gửi yêu cầu HTTP/REST với `withCredentials`, dùng JWT trong HttpOnly cookie và Response Interceptor phục hồi phiên qua `/auth/refresh`. Không lưu token trong `localStorage`. |
 
 ---
 
@@ -89,12 +89,13 @@ Hệ thống cung cấp sẵn lớp chuyển tiếp **`LLMClientAdapter`** tại
   - Khởi tạo client thông qua `AsyncOpenAI(api_key=settings.LLM_API_KEY, base_url=settings.LLM_BASE_URL, timeout=settings.LLM_TIMEOUT_SECONDS)`.
   - Nhờ cơ chế `base_url`, hệ thống dễ dàng kết nối tới:
     1. **OpenAI chính thức:** `https://api.openai.com/v1` (Models: `gpt-4o`, `gpt-4o-mini`).
-    2. **Google Gemini (OpenAI-compatible Endpoint):** `https://generativelanguage.googleapis.com/v1beta/openai/` (Models: `gemini-1.5-flash`, `gemini-1.5-pro`).
+    2. **Google Gemini (OpenAI-compatible Endpoint):** `https://generativelanguage.googleapis.com/v1beta/openai/` (Models: `gemini-2.5-flash`, `gemini-1.5-flash`).
     3. **Local/Self-hosted LLMs:** Ollama / vLLM / LocalAI (`http://localhost:11434/v1`).
 - **Ép kiểu dữ liệu chuẩn (Strict JSON Schema via Pydantic):**
-  - Hàm `generate_structured_json(system_prompt, user_prompt, response_schema)` sử dụng tính năng Structured Outputs của OpenAI SDK (`response_format={"type": "json_object"}` hoặc OpenAI parse schema).
+  - Hàm `generate_structured_json(system_prompt, user_prompt, response_schema)` yêu cầu JSON và xác thực đầu ra bằng Pydantic, tương thích với cả Gemini và OpenAI.
   - Tự động bắt lỗi cú pháp JSON và ép kiểu dữ liệu trả về thành đối tượng `Pydantic BaseModel`, đảm bảo dữ liệu sinh câu hỏi trắc nghiệm không bao giờ bị lệch cấu trúc.
-  - Tích hợp decorator `@retry` từ `tenacity` để tự động thử lại khi gặp lỗi mạng tạm thời hoặc hạn mức cuộc gọi.
+  - Timeout mặc định là 15 giây; `LLM_API_KEY`, endpoint, model và timeout có thể cấu hình qua biến môi trường.
+  - Tích hợp `tenacity` để thử tối đa 3 lần với exponential backoff khi gặp lỗi mạng, HTTP 408/409/429 hoặc lỗi máy chủ 5xx. Nếu hết lượt do rate limit, service trả lỗi thân thiện, không để lộ thông tin khóa.
 
 ---
 

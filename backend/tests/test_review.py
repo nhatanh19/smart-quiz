@@ -337,7 +337,8 @@ def test_review_not_found(client, db_session):
         cookies={"access_token": token},
     )
     assert resp.status_code == 404
-    assert "not found" in resp.json()["detail"].lower()
+    detail = resp.json()["detail"].lower()
+    assert "not found" in detail or "không tìm thấy" in detail
 
 
 def test_review_in_progress_attempt_rejected(client, db_session):
@@ -435,3 +436,22 @@ def test_review_fallback_order_when_no_snapshot(db_session):
     assert questions[0]["question_id"] == str(q1.id)
     assert questions[1]["question_id"] == str(q2.id)
     assert questions[2]["question_id"] == str(q3.id)
+
+def test_review_other_instructor_forbidden(client, db_session):
+    """Issue #4: an instructor cannot review attempts of exams owned by another instructor (HTTP 403)."""
+    _, _, _, _, _, _, _, attempt1 = make_test_data(db_session)
+    other = User(
+        email="other_instructor_rev@example.com",
+        password_hash="hash",
+        full_name="Other Instructor",
+        role=UserRole.INSTRUCTOR,
+    )
+    db_session.add(other)
+    db_session.commit()
+
+    token = create_access_token({"sub": str(other.id), "role": other.role.value})
+    resp = client.get(
+        f"/api/v1/tutor-analytics/review/{attempt1.id}",
+        cookies={"access_token": token},
+    )
+    assert resp.status_code == 403

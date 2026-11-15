@@ -209,7 +209,7 @@ def test_ai_tutor_service_explanation_latency_and_content():
     assert len(feedback.study_suggestions) >= 2, "Must offer at least 2 study suggestions"
 
 
-def test_api_explain_endpoint():
+def test_api_explain_endpoint(monkeypatch):
     """Test the HTTP REST endpoint POST /api/v1/tutor-analytics/explain."""
     payload = {
         "question_content": "Theo Scrum, nguyên tắc WIP Limit có mục đích chính là gì?",
@@ -230,7 +230,13 @@ def test_api_explain_endpoint():
     }
 
     start = time.perf_counter()
-    response = client.post("/api/v1/tutor-analytics/explain", json=payload)
+    from app.core.security import get_current_user
+    from app.models.entities import User, UserRole
+    from app.core.database import get_db
+    with monkeypatch.context() as context:
+        context.setitem(app.dependency_overrides, get_current_user, lambda: User(role=UserRole.STUDENT))
+        context.setitem(app.dependency_overrides, get_db, lambda: None)
+        response = client.post("/api/v1/tutor-analytics/explain", json=payload)
     elapsed_ms = (time.perf_counter() - start) * 1000
 
     assert response.status_code == 200
@@ -260,6 +266,8 @@ if __name__ == "__main__":
     test_ai_tutor_service_explanation_latency_and_content()
     print("✅ test_ai_tutor_service_explanation_latency_and_content passed (< 3s DoD verified)!")
 
-    test_api_explain_endpoint()
+    import pytest
+    with pytest.MonkeyPatch.context() as patch:
+        test_api_explain_endpoint(patch)
     print("✅ test_api_explain_endpoint passed (< 3s HTTP API response verified)!")
     print("\n🎉 ALL TESTS PASSED!")

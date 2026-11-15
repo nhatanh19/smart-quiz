@@ -141,3 +141,43 @@ def test_secure_cookie_setting(client, monkeypatch):
     response = client.post("/api/v1/auth/login", json=ACCOUNT)
     assert response.status_code == 200
     assert all("Secure" in cookie for cookie in response.headers.get_list("set-cookie"))
+
+
+@pytest.mark.parametrize("path", [
+    "/api/v1/parser/upload",
+    "/api/v1/ai-generator/generate-by-matrix",
+    "/api/v1/ai-generator/generate-from-context",
+])
+@pytest.mark.parametrize("role,expected", [(None, 401), ("STUDENT", 403), ("INSTRUCTOR", 200), ("ADMIN", 200)])
+def test_management_api_role_matrix(client, session, path, role, expected):
+    from app.models.entities import UserRole
+    headers = {}
+    if role:
+        user = User(email="role@example.com", full_name="Role User", password_hash="unused", role=UserRole(role))
+        session.add(user)
+        session.flush()
+        # The database role is authoritative even if the JWT claims ADMIN.
+        headers["Authorization"] = "Bearer " + create_access_token({"sub": str(user.id), "role": "ADMIN"})
+    kwargs = (
+        {"files": {"file": ("rbac.txt", b"rbac smoke check", "text/plain")}}
+        if path == "/api/v1/parser/upload"
+        else {}
+    )
+    assert client.post(path, headers=headers, **kwargs).status_code == expected
+
+
+@pytest.mark.parametrize("role", ["STUDENT", "INSTRUCTOR", "ADMIN"])
+def test_profile_data_for_every_role_and_disabled_account(client, session, role):
+    from app.models.entities import UserRole
+    user = User(email="profile@example.com", full_name="Nguyễn An", password_hash="private-hash", role=UserRole(role))
+    session.add(user)
+    session.flush()
+    headers = {"Authorization": "Bearer " + create_access_token({"sub": str(user.id)})}
+    response = client.get("/api/v1/auth/me", headers=headers)
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert (data["full_name"], data["email"], data["role"]) == (user.full_name, user.email, role)
+    assert "password_hash" not in data
+    user.is_active = False
+    session.flush()
+    assert client.get("/api/v1/auth/me", headers=headers).status_code == 401

@@ -86,6 +86,44 @@ export interface ExamReviewData {
   }>;
 }
 
+// ==============================================================================
+// ISSUE #17: KNOWLEDGE GAP DIAGNOSTIC TYPES (WBS 5.2.2)
+// ==============================================================================
+
+export interface WeakTopicItem {
+  topic: string;
+  wrong_count: number;
+  total_questions: number;
+  accuracy_percentage: number;
+  question_ids: string[];
+  cognitive_levels?: string[];
+}
+
+export interface ActionableStudyAdvice {
+  title: string;
+  description: string;
+  action_type: string;
+  priority: string;
+  resource_hint?: string;
+}
+
+export interface KnowledgeGapData {
+  attempt_id: string;
+  exam_id: string;
+  summary_headline: string; // e.g. "Chủ đề bạn cần củng cố: Kế thừa & Đa hình trong OOP"
+  primary_weak_topic?: string;
+  has_gaps: boolean;
+  total_wrong: number;
+  total_questions: number;
+  weak_topics: WeakTopicItem[];
+  advice: ActionableStudyAdvice[];
+  generated_at: string;
+}
+
+// ==============================================================================
+// ISSUE #36: LEARNING ANALYTICS & SCORE DISTRIBUTION TYPES (WBS 5.3)
+// ==============================================================================
+
 export interface StudentScoreTrendItem {
   attempt_id: string;
   exam_id: string;
@@ -242,6 +280,7 @@ export const tutorService = {
   },
 
   /**
+<<<<<<< HEAD
    * Get student learning progress and topic mastery analytics (Issue #36, WBS 5.3.1).
    */
   async getStudentAnalytics(studentId: string = "me"): Promise<StudentAnalyticsData> {
@@ -300,5 +339,16 @@ export const tutorService = {
     } catch (err) {
       throw new Error("Không thể tải xuống tệp CSV bảng điểm.");
     }
+  },
+
+  /**
+   * Diagnose student knowledge gaps & get actionable study advice (Issue #17, WBS 5.2.2).
+   */
+  async getKnowledgeGaps(attemptId: string): Promise<KnowledgeGapData> {
+    const response = await apiClient.get<ApiResponse<KnowledgeGapData>>(`/tutor-analytics/knowledge-gaps/${attemptId}`);
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+    throw new Error(response.data.message || "Không thể tải chẩn đoán lỗ hổng kiến thức từ AI Tutor.");
   },
 };
