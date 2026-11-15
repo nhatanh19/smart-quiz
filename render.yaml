@@ -1,12 +1,24 @@
-# Render Blueprint specification for Smart Quiz Platform
+# Render Blueprint specification for Smart Quiz Platform (Free Tier)
+databases:
+  - name: smart-quiz-db
+    databaseName: smart_quiz
+    user: postgres
+    region: singapore
+    plan: free
+
 services:
-  # 1. Backend Web Service
+  # 1. Backend Web Service (FastAPI + Alembic + Seed)
   - type: web
     name: smart-quiz-backend
     runtime: python
+    region: singapore
+    plan: free
+    healthCheckPath: /health
     buildCommand: "cd backend && pip install -r requirements.txt"
     startCommand: "cd backend && alembic upgrade head && python scripts/seed.py --with-demo-exam && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
     envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
       - key: DATABASE_URL
         fromDatabase:
           name: smart-quiz-db
@@ -16,6 +28,7 @@ services:
       - key: COOKIE_SECURE
         value: "true"
       - key: BACKEND_CORS_ORIGINS
+        # Update with the actual frontend URL if Render appends a random suffix
         value: '["https://smart-quiz-frontend.onrender.com"]'
       - key: LLM_BASE_URL
         value: "https://generativelanguage.googleapis.com/v1beta/openai/"
@@ -23,8 +36,14 @@ services:
         sync: false
       - key: LLM_MODEL_NAME
         value: "gemini-2.5-flash"
+      - key: LLM_TIMEOUT_SECONDS
+        value: "30.0"
+      - key: AI_TUTOR_TIMEOUT_SECONDS
+        value: "15.0"
+      - key: AI_TUTOR_MODEL_TIMEOUT_SECONDS
+        value: "12.0"
 
-  # 2. Frontend Static Site
+  # 2. Frontend Static Site (React + Vite SPA + Same-Origin API Rewrite)
   - type: web
     name: smart-quiz-frontend
     runtime: static
@@ -33,6 +52,7 @@ services:
     routes:
       - type: rewrite
         source: /api/*
+        # Update host below if Render appends a suffix to smart-quiz-backend
         destination: https://smart-quiz-backend.onrender.com/api/*
       - type: rewrite
         source: /*
@@ -40,9 +60,3 @@ services:
     envVars:
       - key: VITE_API_BASE_URL
         value: "/api/v1"
-
-databases:
-  - name: smart-quiz-db
-    databaseName: smart_quiz
-    user: postgres
-    plan: free

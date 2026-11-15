@@ -36,6 +36,17 @@ class Settings(BaseSettings):
     # Database configuration (PostgreSQL / Supabase / Neon)
     DATABASE_URL: str = "postgresql+psycopg2://postgres:admin@localhost:5432/smart_quiz"
 
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def normalize_database_url(cls, v: str) -> str:
+        """Normalize legacy postgres:// URLs (e.g. Render) for SQLAlchemy 2.0."""
+        if isinstance(v, str):
+            url = v.strip()
+            if url.startswith("postgres://"):
+                return "postgresql+psycopg2://" + url[len("postgres://") :]
+            return url
+        return v
+
     # JWT Authentication & Cryptography
     SECRET_KEY: str = "smart_quiz_super_secret_jwt_key_for_development_replace_in_prod"
     ALGORITHM: str = "HS256"
