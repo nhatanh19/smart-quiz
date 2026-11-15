@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import io
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar, Dict, Optional, Type
+from typing import ClassVar, Dict, List, Optional, Tuple, Type
 from zipfile import BadZipFile
 
 from docx.opc.exceptions import PackageNotFoundError
@@ -27,6 +27,8 @@ from app.modules.parser.exceptions import (
 )
 from app.modules.parser.schemas import DocumentParseResult
 
+SpanRange = Tuple[int, int]
+
 
 @dataclass
 class ExtractedContent:
@@ -34,6 +36,7 @@ class ExtractedContent:
 
     text: str
     page_count: Optional[int] = None
+    line_marked_spans: Dict[int, List[SpanRange]] = field(default_factory=dict)
 
 
 class BaseExtractor(ABC):
@@ -114,6 +117,81 @@ class PdfExtractor(BaseExtractor):
 class DocxExtractor(BaseExtractor):
     """python-docx-backed text extractor for Word (.docx) documents."""
 
+    @staticmethod
+    def _is_run_marked(run) -> bool:
+        """Detect underline, highlight, or vivid red/green emphasis used to mark correct options."""
+        if bool(run.underline):
+            return True
+        if getattr(run.font, "highlight_color", None) is not None:
+            return True
+        color = getattr(run.font, "color", None)
+        rgb = getattr(color, "rgb", None) if color is not None else None
+        if rgb is not None:
+            try:
+                r, g, b = rgb[0], rgb[1], rgb[2]
+                is_vivid_red = r >= 170 and g <= 90 and b <= 90
+                is_vivid_green = g >= 130 and r <= 80 and b <= 80
+                if is_vivid_red or is_vivid_green:
+                    return True
+            except (TypeError, IndexError):
+                pass
+        return False
+
+    @classmethod
+    def _extract_paragraph_with_spans(cls, paragraph) -> Tuple[str, List[SpanRange]]:
+        """Extract stripped paragraph text alongside marked character ranges in that stripped text."""
+        raw_text = paragraph.text.replace("\r\n", "\n").replace("\r", "\n")
+        stripped = raw_text.strip()
+        if not stripped:
+            return "", []
+
+        run_parts = [run.text.replace("\r\n", "\n").replace("\r", "\n") for run in paragraph.runs]
+        if "".join(run_parts) != raw_text:
+            return stripped, []
+
+        leading_ws = len(raw_text) - len(raw_text.lstrip())
+        max_len = len(stripped)
+        spans: List[SpanRange] = []
+        cursor = 0
+        for run, r_text in zip(paragraph.runs, run_parts):
+            r_len = len(r_text)
+            if r_len > 0 and cls._is_run_marked(run):
+                start = max(0, cursor - leading_ws)
+                end = min(max_len, cursor + r_len - leading_ws)
+                if end > start:
+                    spans.append((start, end))
+            cursor += r_len
+        return stripped, spans
+
+    @staticmethod
+    def _map_block_lines_spans(
+        block_text: str,
+        block_spans: List[SpanRange],
+        start_line_idx: int,
+        line_marked_spans: Dict[int, List[SpanRange]],
+    ) -> int:
+        """Project block-level character spans onto 0-based lines after newline normalization."""
+        normalized_block = block_text.replace("\r\n", "\n").replace("\r", "\n")
+        sublines = normalized_block.split("\n")
+        if not block_spans:
+            return start_line_idx + len(sublines)
+
+        raw_norm_offset = 0
+        # Map character positions line-by-line (note CRLF replacement only happens inside cell text if present)
+        for offset_idx, subline in enumerate(sublines):
+            line_start = raw_norm_offset
+            line_end = line_start + len(subline)
+            clipped: List[SpanRange] = []
+            for ms, me in block_spans:
+                ov_s = max(ms, line_start)
+                ov_e = min(me, line_end)
+                if ov_e > ov_s:
+                    clipped.append((ov_s - line_start, ov_e - line_start))
+            if clipped:
+                line_marked_spans[start_line_idx + offset_idx] = clipped
+            raw_norm_offset = line_end + 1
+        return start_line_idx + len(sublines)
+
     def extract(self, content: bytes, filename: str) -> ExtractedContent:
         try:
             doc = docx.Document(io.BytesIO(content))
@@ -131,27 +209,46 @@ class DocxExtractor(BaseExtractor):
             ) from err
 
         text_blocks: list[str] = []
+        block_spans: list[List[SpanRange]] = []
 
-        # 1. Extract text from document paragraphs
+        # 1. Extract text and underline/highlight spans from document paragraphs
         for paragraph in doc.paragraphs:
-            p_text = paragraph.text.strip()
+            p_text, p_spans = self._extract_paragraph_with_spans(paragraph)
             if p_text:
                 text_blocks.append(p_text)
+                block_spans.append(p_spans)
 
         # 2. Extract text from document tables (deduplicating merged cells)
         for table in doc.tables:
             for row in table.rows:
                 seen_cells: set[int] = set()
                 row_texts: list[str] = []
+                row_spans: List[SpanRange] = []
+                row_cursor = 0
                 for cell in row.cells:
                     cell_id = id(cell._tc)
                     if cell_id not in seen_cells:
                         seen_cells.add(cell_id)
                         c_text = cell.text.strip()
                         if c_text:
+                            if row_texts:
+                                row_cursor += 3  # separator " | "
+                            # Collect marked spans across cell paragraphs joined by '\n'
+                            c_inner_offset = 0
+                            cell_norm = c_text.replace("\r\n", "\n").replace("\r", "\n")
+                            for p_idx, cell_para in enumerate(cell.paragraphs):
+                                cp_text, cp_spans = self._extract_paragraph_with_spans(cell_para)
+                                if cp_text:
+                                    pos = cell_norm.find(cp_text, c_inner_offset)
+                                    if pos != -1:
+                                        for ms, me in cp_spans:
+                                            row_spans.append((row_cursor + pos + ms, row_cursor + pos + me))
+                                        c_inner_offset = pos + len(cp_text)
                             row_texts.append(c_text)
+                            row_cursor += len(cell_norm)
                 if row_texts:
                     text_blocks.append(" | ".join(row_texts))
+                    block_spans.append(row_spans)
 
         raw_text = "\n".join(text_blocks).replace("\r\n", "\n").replace("\r", "\n").strip()
         if not raw_text:
@@ -160,7 +257,16 @@ class DocxExtractor(BaseExtractor):
                 filename=filename,
             )
 
-        return ExtractedContent(text=raw_text, page_count=None)
+        line_marked_spans: Dict[int, List[SpanRange]] = {}
+        line_idx = 0
+        for b_text, b_spans in zip(text_blocks, block_spans):
+            line_idx = self._map_block_lines_spans(b_text, b_spans, line_idx, line_marked_spans)
+
+        return ExtractedContent(
+            text=raw_text,
+            page_count=None,
+            line_marked_spans=line_marked_spans,
+        )
 
 
 class TxtExtractor(BaseExtractor):
@@ -226,22 +332,10 @@ class FileParserService:
         return extractor_cls()
 
     @classmethod
-    def parse_file(cls, filename: str, content: bytes) -> DocumentParseResult:
-        """Parse raw file bytes and extract structured document text and metadata.
-
-        Args:
-            filename: Name of the uploaded file.
-            content: Raw binary content of the file.
-
-        Returns:
-            DocumentParseResult containing metadata, statistics, and UTF-8 raw text.
-
-        Raises:
-            EmptyFileError: If file is 0 bytes or extracted text is empty.
-            FileSizeLimitExceededError: If file exceeds 10MB limit.
-            UnsupportedFileTypeError: If file extension is not .pdf, .docx, or .txt.
-            CorruptedFileError: If file content is damaged, encrypted, or invalid.
-        """
+    def _parse_file_internal(
+        cls, filename: str, content: bytes
+    ) -> Tuple[DocumentParseResult, Dict[int, List[SpanRange]]]:
+        """Validate, extract, and return DocumentParseResult along with optional line formatting hints."""
         # 1. Empty check (0 bytes)
         if not content or len(content) == 0:
             raise EmptyFileError(
@@ -285,7 +379,7 @@ class FileParserService:
         word_count = len(clean_text.split())
 
         # 7. Construct DocumentParseResult
-        return DocumentParseResult(
+        document_result = DocumentParseResult(
             filename=filename,
             file_type=extension.lstrip("."),
             file_size=len(content),
@@ -294,6 +388,34 @@ class FileParserService:
             page_count=extracted.page_count,
             raw_text=clean_text,
         )
+        return document_result, extracted.line_marked_spans
+
+    @classmethod
+    def parse_file(cls, filename: str, content: bytes) -> DocumentParseResult:
+        """Parse raw file bytes and extract structured document text and metadata.
+
+        Args:
+            filename: Name of the uploaded file.
+            content: Raw binary content of the file.
+
+        Returns:
+            DocumentParseResult containing metadata, statistics, and UTF-8 raw text.
+
+        Raises:
+            EmptyFileError: If file is 0 bytes or extracted text is empty.
+            FileSizeLimitExceededError: If file exceeds 10MB limit.
+            UnsupportedFileTypeError: If file extension is not .pdf, .docx, or .txt.
+            CorruptedFileError: If file content is damaged, encrypted, or invalid.
+        """
+        document_result, _ = cls._parse_file_internal(filename, content)
+        return document_result
+
+    @classmethod
+    def parse_file_with_hints(
+        cls, filename: str, content: bytes
+    ) -> Tuple[DocumentParseResult, Dict[int, List[SpanRange]]]:
+        """Parse raw file bytes and return both DocumentParseResult and formatting hints."""
+        return cls._parse_file_internal(filename, content)
 
 
 # Backward-compatible alias
