@@ -16,6 +16,7 @@ import {
   Search,
   BookOpen,
 } from "lucide-react";
+import { extractApiError } from "@/lib/apiClient";
 import {
   tutorService,
   ReviewQuestionItem,
@@ -24,6 +25,9 @@ import {
 } from "@/services/tutorService";
 import AITutorExplanationCard from "@/components/tutor/AITutorExplanationCard";
 import KnowledgeGapCard from "@/components/tutor/KnowledgeGapCard";
+
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Sample realistic exam attempt data matching seed.py (Quản trị dự án phần mềm / OOP)
 const SAMPLE_REVIEW_QUESTIONS: ReviewQuestionItem[] = [
@@ -226,11 +230,12 @@ export const ReviewExamView: React.FC<ReviewExamViewProps> = ({ attemptId: propA
         }
       } catch (err: any) {
         console.error("Error loading attempt review:", err);
-        const errMsg =
-          err?.response?.data?.detail ||
-          err?.message ||
-          "Không thể tải dữ liệu bài thi. Vui lòng kiểm tra mã bài thi (Attempt ID) hoặc quyền truy cập.";
-        setFetchError(errMsg);
+        setFetchError(
+          extractApiError(
+            err,
+            "Không thể tải dữ liệu bài thi. Vui lòng kiểm tra mã bài thi (Attempt ID) hoặc quyền truy cập.",
+          ),
+        );
       } finally {
         setLoading(false);
         setLoadingGaps(false);
@@ -279,9 +284,16 @@ export const ReviewExamView: React.FC<ReviewExamViewProps> = ({ attemptId: propA
     }, 100);
 
     try {
+      const candidateQuestionId = question.question_id || qId;
       const result = await tutorService.getExplanation({
-        attempt_id: effectiveAttemptId,
-        question_id: question.question_id || qId,
+        attempt_id:
+          effectiveAttemptId && UUID_REGEX.test(effectiveAttemptId)
+            ? effectiveAttemptId
+            : undefined,
+        question_id:
+          candidateQuestionId && UUID_REGEX.test(candidateQuestionId)
+            ? candidateQuestionId
+            : undefined,
         question_content: question.content,
         question_type: question.question_type || "SINGLE_CHOICE",
         options: question.options,
@@ -303,11 +315,13 @@ export const ReviewExamView: React.FC<ReviewExamViewProps> = ({ attemptId: propA
       );
     } catch (error: any) {
       console.error("Error fetching AI explanation:", error);
-      const message =
-        error?.response?.data?.detail ||
-        error?.message ||
-        "Không gọi được AI Tutor. Kiểm tra backend đang chạy và cấu hình LLM_API_KEY trong backend/.env.";
-      setErrorQuestions((prev) => ({ ...prev, [qId]: String(message) }));
+      setErrorQuestions((prev) => ({
+        ...prev,
+        [qId]: extractApiError(
+          error,
+          "Không gọi được AI Tutor. Kiểm tra backend đang chạy và cấu hình LLM trong backend/.env.",
+        ),
+      }));
     } finally {
       clearInterval(interval);
       setLoadingQuestions((prev) => ({ ...prev, [qId]: false }));
@@ -574,7 +588,7 @@ export const ReviewExamView: React.FC<ReviewExamViewProps> = ({ attemptId: propA
                               ? "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
                               : "bg-gradient-to-r from-emerald-600 to-teal-600 text-white hover:from-emerald-700 hover:to-teal-700 active:scale-95"
                           }`}
-                          title="Bấm để nhận giải thích chi tiết từ Gia sư ảo AI trong vòng < 3 giây"
+                          title="Bấm để nhận giải thích chi tiết từ Gia sư ảo AI"
                         >
                           {isLoading ? (
                             <>

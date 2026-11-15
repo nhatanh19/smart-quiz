@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef } from "react";
-import axios from "axios";
+import { extractApiError } from "@/lib/apiClient";
 import {
   Sparkles,
   Settings2,
@@ -71,23 +71,15 @@ const LEVEL_LABELS: Record<string, string> = {
   HARD: "Khó",
 };
 
-function extractError(error: unknown): string {
-  if (axios.isAxiosError(error)) {
-    const detail = error.response?.data?.detail;
-    if (typeof detail === "string" && detail.trim()) return detail;
-    if (Array.isArray(detail)) {
-      const messages = detail
-        .map((item) => (typeof item === "object" && item && "msg" in item ? String(item.msg) : ""))
-        .filter(Boolean);
-      if (messages.length > 0) return messages.join(", ");
-    }
-    if (!error.response) {
-      return "Không thể kết nối tới máy chủ. Vui lòng thử lại.";
-    }
-    return error.message || "Không thể xử lý yêu cầu. Vui lòng thử lại.";
+function filterCategoriesForSubject(
+  allCats: Category[],
+  subjectId: string,
+): Category[] {
+  if (subjectId) {
+    return allCats.filter((c) => c.subject_id === subjectId);
   }
-  if (error instanceof Error) return error.message;
-  return "Đã xảy ra lỗi không xác định.";
+  const unlinked = allCats.filter((c) => !c.subject_id);
+  return unlinked.length > 0 ? unlinked : allCats;
 }
 
 // ==============================================================================
@@ -328,6 +320,7 @@ export const AiGenPage: React.FC = () => {
   // ── Save state ───────────────────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedSubjectId, setSelectedSubjectId] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState("");
@@ -352,12 +345,37 @@ export const AiGenPage: React.FC = () => {
     bloomSum === 100 &&
     typeSum === 100;
 
+  const matrixMissingReasons: string[] = [];
+  if (topic.trim().length < 2) {
+    matrixMissingReasons.push("nhập Chủ đề tối thiểu 2 ký tự");
+  }
+  if (bloomSum !== 100) {
+    matrixMissingReasons.push(`tổng tỷ lệ Bloom đang là ${bloomSum}% (cần 100%)`);
+  }
+  if (typeSum !== 100) {
+    matrixMissingReasons.push(`tổng tỷ lệ Loại câu hỏi đang là ${typeSum}% (cần 100%)`);
+  }
+
   const canSubmitDocument =
     rawText.trim().length >= 20 &&
     totalQuestions >= 1 &&
     bloomSum === 100 &&
     typeSum === 100 &&
     overlap < chunkSize;
+
+  const documentMissingReasons: string[] = [];
+  if (rawText.trim().length < 20) {
+    documentMissingReasons.push("nội dung tài liệu tối thiểu 20 ký tự");
+  }
+  if (overlap >= chunkSize) {
+    documentMissingReasons.push("độ gối đầu phải nhỏ hơn kích thước đoạn");
+  }
+  if (bloomSum !== 100) {
+    documentMissingReasons.push(`tổng tỷ lệ Bloom đang là ${bloomSum}% (cần 100%)`);
+  }
+  if (typeSum !== 100) {
+    documentMissingReasons.push(`tổng tỷ lệ Loại câu hỏi đang là ${typeSum}% (cần 100%)`);
+  }
 
   // ── Handlers (Matrix) ───────────────────────────────────────────────────────
   const handlePreview = async () => {
@@ -368,22 +386,33 @@ export const AiGenPage: React.FC = () => {
       const data = await previewMatrixAllocation(buildMatrixRequest());
       setPreview(data);
     } catch (err) {
-      setPreviewError(extractError(err));
+      setPreviewError(extractApiError(err));
     } finally {
       setPreviewLoading(false);
     }
   };
 
   const initSubjectCategories = async () => {
-    const subs = await listSubjects();
+    const [subs, cats] = await Promise.all([listSubjects(), listCategories()]);
     setSubjects(subs);
-    if (subs.length > 0) {
-      setSelectedSubjectId(subs[0].id);
-      const cats = await listCategories();
-      const filtered = cats.filter((c) => c.subject_id === subs[0].id);
-      setCategories(filtered);
-      if (filtered.length > 0) setSelectedCategoryId(filtered[0].id);
+    setAllCategories(cats);
+
+    const initialSubjectId = subs.length > 0 ? subs[0].id : "";
+    const subjectMatched = filterCategoriesForSubject(cats, initialSubjectId);
+
+    // If a freshly seeded DB has subjects without linked categories (or no subjects at all),
+    // fall back to unlinked/all categories so instructors can still save generated questions.
+    if (initialSubjectId && subjectMatched.length === 0 && cats.length > 0) {
+      const fallbackCats = filterCategoriesForSubject(cats, "");
+      setSelectedSubjectId("");
+      setCategories(fallbackCats);
+      setSelectedCategoryId(fallbackCats[0]?.id || "");
+      return;
     }
+
+    setSelectedSubjectId(initialSubjectId);
+    setCategories(subjectMatched);
+    setSelectedCategoryId(subjectMatched[0]?.id || "");
   };
 
   const handleGenerate = async () => {
@@ -404,10 +433,10 @@ export const AiGenPage: React.FC = () => {
       try {
         await initSubjectCategories();
       } catch (catErr) {
-        setSaveError(extractError(catErr));
+        setSaveError(extractApiError(catErr));
       }
     } catch (err) {
-      setGenError(extractError(err));
+      setGenError(extractApiError(err));
     } finally {
       setGenLoading(false);
     }
@@ -467,10 +496,10 @@ export const AiGenPage: React.FC = () => {
       try {
         await initSubjectCategories();
       } catch (catErr) {
-        setSaveError(extractError(catErr));
+        setSaveError(extractApiError(catErr));
       }
     } catch (err) {
-      setGenError(extractError(err));
+      setGenError(extractApiError(err));
     } finally {
       setGenLoading(false);
     }
@@ -481,12 +510,14 @@ export const AiGenPage: React.FC = () => {
     setSelectedCategoryId("");
     setSaveError(null);
     try {
-      const cats = await listCategories();
-      const filtered = cats.filter((c) => c.subject_id === subjectId);
+      const cats =
+        allCategories.length > 0 ? allCategories : await listCategories();
+      if (allCategories.length === 0) setAllCategories(cats);
+      const filtered = filterCategoriesForSubject(cats, subjectId);
       setCategories(filtered);
       if (filtered.length > 0) setSelectedCategoryId(filtered[0].id);
     } catch (err) {
-      setSaveError(extractError(err));
+      setSaveError(extractApiError(err));
     }
   };
 
@@ -727,6 +758,17 @@ export const AiGenPage: React.FC = () => {
                 {genLoading ? "Đang sinh câu hỏi…" : "Sinh câu hỏi bằng AI"}
               </button>
             </div>
+
+            {!canSubmitMatrix && matrixMissingReasons.length > 0 && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                Để kích hoạt nút sinh câu hỏi, vui lòng: {matrixMissingReasons.join("; ")}.
+              </p>
+            )}
+            {genLoading && (
+              <p className="text-xs text-purple-700 bg-purple-50 border border-purple-200 rounded-lg px-3 py-2">
+                Đang gọi AI sinh câu hỏi theo từng nhóm ma trận, quá trình này có thể mất 20–90 giây tùy số lượng câu…
+              </p>
+            )}
 
             {/* Error */}
             {genError && (
@@ -1045,6 +1087,17 @@ export const AiGenPage: React.FC = () => {
               </button>
             </div>
 
+            {!canSubmitDocument && documentMissingReasons.length > 0 && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                Để kích hoạt nút sinh câu hỏi từ tài liệu, vui lòng: {documentMissingReasons.join("; ")}.
+              </p>
+            )}
+            {genLoading && (
+              <p className="text-xs text-purple-700 bg-purple-50 border border-purple-200 rounded-lg px-3 py-2">
+                Đang phân đoạn tài liệu và gọi AI sinh câu hỏi, quá trình này có thể mất 20–90 giây…
+              </p>
+            )}
+
             {/* Error */}
             {genError && (
               <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
@@ -1122,9 +1175,11 @@ export const AiGenPage: React.FC = () => {
             onChange={(e) => handleSubjectChange(e.target.value)}
             className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-purple-400 focus:outline-none"
           >
-            {subjects.length === 0 && (
-              <option value="">-- Không có môn học --</option>
-            )}
+            <option value="">
+              {subjects.length === 0
+                ? "-- Danh mục chung (chưa gắn môn) --"
+                : "-- Tất cả / Danh mục chung --"}
+            </option>
             {subjects.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
@@ -1143,7 +1198,7 @@ export const AiGenPage: React.FC = () => {
             className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-purple-400 focus:outline-none"
           >
             {categories.length === 0 && (
-              <option value="">-- Chọn môn học trước --</option>
+              <option value="">-- Chưa có danh mục phù hợp --</option>
             )}
             {categories.map((c) => (
               <option key={c.id} value={c.id}>

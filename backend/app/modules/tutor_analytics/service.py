@@ -228,6 +228,7 @@ VÍ DỤ MẪU:
                 user_prompt=user_prompt,
                 response_schema=AITutorFeedbackSchema,
                 temperature=0.3,
+                model_name=model_name,
             ),
             timeout=timeout,
         )
@@ -238,7 +239,10 @@ VÍ DỤ MẪU:
     def _llm_model_chain(self) -> List[str]:
         """Ordered list of models to try: primary first, then the optional backup."""
         chain = [settings.LLM_MODEL_NAME]
-        backup = str(getattr(settings, "LLM_FALLBACK_MODEL_NAME", os.environ.get("LLM_FALLBACK_MODEL_NAME", "")) or "").strip()
+        backup = str(
+            getattr(settings, "LLM_FALLBACK_MODEL_NAME", "")
+            or os.environ.get("LLM_FALLBACK_MODEL_NAME", "")
+        ).strip()
         if backup and backup != settings.LLM_MODEL_NAME:
             chain.append(backup)
         return chain
@@ -355,7 +359,7 @@ VÍ DỤ MẪU:
 
         feedback: AITutorFeedbackSchema
         from_llm = False
-        timeout_ceiling = float(getattr(settings, "AI_TUTOR_TIMEOUT_SECONDS", 2.8))
+        timeout_ceiling = float(getattr(settings, "AI_TUTOR_TIMEOUT_SECONDS", 15.0))
         deadline = start_time + timeout_ceiling
 
         # Model-level failover: try the primary model, then the backup model,
@@ -365,7 +369,7 @@ VÍ DỤ MẪU:
             remaining = deadline - time.perf_counter()
             if remaining <= 0.3:  # not enough time left to attempt another network call
                 break
-            model_timeout_slice = float(getattr(settings, "AI_TUTOR_MODEL_TIMEOUT_SECONDS", 2.4))
+            model_timeout_slice = float(getattr(settings, "AI_TUTOR_MODEL_TIMEOUT_SECONDS", 12.0))
             per_model_timeout = min(model_timeout_slice, remaining)
             try:
                 feedback = await self._call_llm_with_model(

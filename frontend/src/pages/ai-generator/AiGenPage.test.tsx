@@ -169,10 +169,11 @@ describe("AiGenPage — Config Step", () => {
     expect(screen.getByText("Đúng/Sai")).toBeTruthy();
   });
 
-  it("disables Generate button when topic is empty", () => {
+  it("disables Generate button when topic is empty and explains why", () => {
     render(<AiGenPage />);
     const btn = screen.getByRole("button", { name: /Sinh câu hỏi bằng AI/ });
     expect(btn.hasAttribute("disabled")).toBe(true);
+    expect(screen.getByText(/nhập Chủ đề tối thiểu 2 ký tự/)).toBeTruthy();
   });
 
   it("enables Generate button when topic is filled and ratios sum to 100", () => {
@@ -411,5 +412,37 @@ describe("AiGenPage — Generate & Review Step", () => {
 
     await renderAndGenerate();
     await screen.findByText("Không thể tải danh sách môn học.");
+  });
+
+  it("allows saving into unlinked seeded categories when subjects list is empty", async () => {
+    const { listSubjects, listCategories, createQuestion } = await import(
+      "@/services/questionBankApi"
+    );
+    vi.mocked(listSubjects).mockResolvedValueOnce([]);
+    vi.mocked(listCategories).mockResolvedValueOnce([
+      {
+        id: "cat-seed",
+        name: "Quản trị Dự án Phần mềm",
+        subject_id: null,
+      } as never,
+    ]);
+
+    await renderAndGenerate();
+
+    await waitFor(() => {
+      expect(screen.getByText("Quản trị Dự án Phần mềm")).toBeTruthy();
+    });
+
+    const saveBtn = screen.getByRole("button", {
+      name: /Lưu.*câu vào Ngân hàng/,
+    }) as HTMLButtonElement;
+    expect(saveBtn.disabled).toBe(false);
+    fireEvent.click(saveBtn);
+
+    await waitFor(() => {
+      expect(createQuestion).toHaveBeenCalledWith(
+        expect.objectContaining({ category_id: "cat-seed" }),
+      );
+    });
   });
 });

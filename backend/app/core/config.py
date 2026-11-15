@@ -1,7 +1,10 @@
 import json
+from pathlib import Path
 from typing import List, Union
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_BACKEND_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
 
 class Settings(BaseSettings):
@@ -44,13 +47,16 @@ class Settings(BaseSettings):
     LLM_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
     LLM_API_KEY: str = ""
     LLM_MODEL_NAME: str = "gemini-2.5-flash"
+    LLM_FALLBACK_MODEL_NAME: str = ""
     LLM_TIMEOUT_SECONDS: float = Field(default=15.0, gt=0)
+    AI_TUTOR_TIMEOUT_SECONDS: float = Field(default=15.0, gt=0)
+    AI_TUTOR_MODEL_TIMEOUT_SECONDS: float = Field(default=12.0, gt=0)
 
     # Seed script password
     SEED_DEFAULT_PASSWORD: str = "SmartQuiz@123"
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(_BACKEND_ENV_FILE),
         env_file_encoding="utf-8",
         case_sensitive=True,
         extra="ignore",

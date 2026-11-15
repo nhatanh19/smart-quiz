@@ -51,3 +51,36 @@ export function authError(error: unknown): string {
   }))].join(" ");
   return error.response ? "Không thể xử lý yêu cầu. Vui lòng thử lại." : "Không thể kết nối máy chủ. Vui lòng kiểm tra kết nối.";
 }
+
+/**
+ * Extract a user-facing message from Axios / FastAPI error responses (including 422 arrays).
+ */
+export function extractApiError(
+  error: unknown,
+  fallback = "Đã xảy ra lỗi không xác định.",
+): string {
+  if (axios.isAxiosError(error)) {
+    const detail = error.response?.data?.detail;
+    if (typeof detail === "string" && detail.trim()) return detail;
+    if (Array.isArray(detail)) {
+      const messages = detail
+        .map((item) =>
+          typeof item === "object" && item && "msg" in item
+            ? String((item as { msg: unknown }).msg)
+            : typeof item === "string"
+              ? item
+              : "",
+        )
+        .filter(Boolean);
+      if (messages.length > 0) return messages.join(", ");
+    } else if (detail && typeof detail === "object" && "msg" in detail) {
+      return String((detail as { msg: unknown }).msg);
+    }
+    if (!error.response) {
+      return "Không thể kết nối tới máy chủ. Vui lòng thử lại.";
+    }
+    return error.message || "Không thể xử lý yêu cầu. Vui lòng thử lại.";
+  }
+  if (error instanceof Error && error.message.trim()) return error.message;
+  return fallback;
+}
