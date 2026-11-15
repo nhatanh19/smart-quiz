@@ -150,6 +150,19 @@ class LLMClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, GeneratedResponse(value=9))
         self.assertEqual(self.create.await_args.kwargs["model"], "backup-fast-model")
 
+    def test_database_url_normalizes_legacy_postgres_scheme(self) -> None:
+        settings = Settings(
+            _env_file=None,
+            DATABASE_URL="postgres://user:pass@host:5432/smart_quiz",
+        )
+        self.assertEqual(
+            settings.DATABASE_URL,
+            "postgresql+psycopg2://user:pass@host:5432/smart_quiz",
+        )
+
+        sqlite_settings = Settings(_env_file=None, DATABASE_URL="sqlite://")
+        self.assertEqual(sqlite_settings.DATABASE_URL, "sqlite://")
+
     def test_client_uses_environment_key_and_configured_timeout(self) -> None:
         with patch("app.core.llm_client.AsyncOpenAI") as openai_client:
             adapter = LLMClientAdapter(
