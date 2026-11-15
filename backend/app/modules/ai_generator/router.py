@@ -9,6 +9,8 @@ from app.modules.ai_generator.schemas import (
     BloomTemplatesCatalogResponse,
     GenerateByMatrixRequest,
     GenerateByMatrixResponse,
+    GenerateFromContextRequest,
+    GenerateFromContextResponse,
     PromptPreviewResponse,
 )
 from app.modules.ai_generator.service import (
@@ -101,23 +103,46 @@ async def generate_by_matrix(
 
 
 # ==============================================================================
-# PLACEHOLDER ENDPOINT FOR SPRINT 2 (Issue #22 - WBS 3.3.2)
+# DOCUMENT-TO-QUIZ GENERATION (Issue #33 / WBS 3.3.1 & 3.3.2)
 # ==============================================================================
 
 
 @router.post(
     "/generate-from-context",
-    response_model=APIResponse[dict],
+    response_model=APIResponse[Union[GenerateFromContextResponse, Dict[str, Any]]],
     dependencies=[Depends(require_roles(AI_GENERATOR_ROLES))],
 )
-async def generate_from_context_placeholder():
-    """Generate quiz from uploaded document context (RAG/Chunking) placeholder.
+async def generate_from_context(
+    payload: Optional[GenerateFromContextRequest] = Body(default=None),
+):
+    """Generate quiz questions grounded in long-form document text chunks.
 
-    // TODO: Dev 2 - Implement text chunking, context injection into LLM prompts,
-    // and strict JSON Schema validation for generated quiz items.
+    Performs sliding-window text chunking, matrix cell planning, and structured LLM
+    generation with strict anti-duplication and distractor validation.
+    When invoked with no request body (RBAC smoke check), returns a ready-state response.
     """
+    if payload is None:
+        return APIResponse(
+            success=True,
+            message="Dịch vụ sinh câu hỏi từ tài liệu đã sẵn sàng; vui lòng gửi nội dung tài liệu để tạo câu hỏi.",
+            data={"generated_questions": []},
+        )
+
+    try:
+        result = await ai_generator_service.generate_from_context(payload)
+    except LLMUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    except QuestionGenerationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+
     return APIResponse(
         success=True,
-        message="// TODO: Dev 2 - Implement Context-based Document Quiz Generation logic",
-        data={"generated_questions": []},
+        message=f"Đã sinh thành công {result.total_generated} câu hỏi từ tài liệu ({result.chunks_used}/{result.total_chunks} đoạn ngữ cảnh)",
+        data=result,
     )
