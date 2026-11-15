@@ -7,6 +7,7 @@ import type {
   Question,
   QuestionLevel,
   QuestionOption,
+  QuestionSource,
   QuestionType,
   Subject,
 } from "@/types";
@@ -33,6 +34,7 @@ export interface QuestionPayload {
   options: QuestionOption[];
   tags: string[];
   explanation: string | null;
+  source_type?: QuestionSource;
 }
 
 async function getData<T>(path: string) {

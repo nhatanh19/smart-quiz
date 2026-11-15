@@ -7,6 +7,7 @@ import {
   Download,
   File,
   FileText,
+  ListChecks,
   LoaderCircle,
   RotateCcw,
   Sparkles,
@@ -16,13 +17,30 @@ import {
 import {
   DocumentParseResult,
   extractUploadErrorMessage,
-  uploadAndExtractDocument,
+  parseQuestionsFromText,
+  uploadAndParseDocument,
 } from "@/services/parserApi";
+import { ParsedQuestionPreviewPanel } from "./ParsedQuestionPreviewPanel";
+import {
+  createEmptyParsedQuestion,
+  EditableParsedQuestion,
+  toEditableQuestions,
+} from "./parsedQuestionUtils";
 
 const ALLOWED_EXTENSIONS = [".pdf", ".docx", ".txt"];
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB (10,485,760 bytes)
 
 type ParserStatus = "idle" | "selected" | "uploading" | "success" | "error";
+type ResultViewTab = "questions" | "raw_text";
+
+interface DeletedQuestionRecord {
+  question: EditableParsedQuestion;
+  index: number;
+}
+
+export interface DocumentParserTabProps {
+  onQuestionsSaved?: () => void;
+}
 
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -55,11 +73,19 @@ function validateFile(file: File): string | null {
   return null;
 }
 
-export const DocumentParserTab: React.FC = () => {
+export const DocumentParserTab: React.FC<DocumentParserTabProps> = ({
+  onQuestionsSaved,
+}) => {
   const [status, setStatus] = useState<ParserStatus>("idle");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [parseResult, setParseResult] = useState<DocumentParseResult | null>(null);
+  const [editableQuestions, setEditableQuestions] = useState<EditableParsedQuestion[]>([]);
+  const [deletedHistory, setDeletedHistory] = useState<DeletedQuestionRecord[]>([]);
+  const [documentWarnings, setDocumentWarnings] = useState<string[]>([]);
+  const [unmatchedAnswerKeys, setUnmatchedAnswerKeys] = useState<Record<number, string[]>>({});
+  const [resultView, setResultView] = useState<ResultViewTab>("questions");
+  const [reparsingRawText, setReparsingRawText] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
@@ -72,6 +98,8 @@ export const DocumentParserTab: React.FC = () => {
       setErrorMessage(error);
       setSelectedFile(null);
       setParseResult(null);
+      setEditableQuestions([]);
+      setDeletedHistory([]);
       setStatus("error");
       return;
     }
@@ -79,6 +107,10 @@ export const DocumentParserTab: React.FC = () => {
     setSelectedFile(file);
     setErrorMessage(null);
     setParseResult(null);
+    setEditableQuestions([]);
+    setDeletedHistory([]);
+    setDocumentWarnings([]);
+    setUnmatchedAnswerKeys({});
     setStatus("selected");
   };
 
@@ -134,7 +166,7 @@ export const DocumentParserTab: React.FC = () => {
       setUploadProgress(0);
       setErrorMessage(null);
 
-      const result = await uploadAndExtractDocument(
+      const result = await uploadAndParseDocument(
         selectedFile,
         (progressEvent) => {
           if (progressEvent.total) {
@@ -147,7 +179,13 @@ export const DocumentParserTab: React.FC = () => {
       );
 
       setUploadProgress(100);
-      setParseResult(result);
+      setParseResult(result.document);
+      const nextQuestions = toEditableQuestions(result.questions ?? []);
+      setEditableQuestions(nextQuestions);
+      setDeletedHistory([]);
+      setDocumentWarnings(result.warnings ?? []);
+      setUnmatchedAnswerKeys(result.unmatched_answer_keys ?? {});
+      setResultView(nextQuestions.length > 0 ? "questions" : "raw_text");
       setStatus("success");
     } catch (err: unknown) {
       const msg = extractUploadErrorMessage(err);
@@ -159,12 +197,114 @@ export const DocumentParserTab: React.FC = () => {
   const handleReset = () => {
     setSelectedFile(null);
     setParseResult(null);
+    setEditableQuestions([]);
+    setDeletedHistory([]);
+    setDocumentWarnings([]);
+    setUnmatchedAnswerKeys({});
+    setResultView("questions");
     setErrorMessage(null);
     setUploadProgress(0);
     setStatus("idle");
     setCopied(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
+    }
+  };
+
+  const handleUpdateQuestion = (
+    localId: string,
+    updater: (prev: EditableParsedQuestion) => EditableParsedQuestion,
+  ) => {
+    setEditableQuestions((current) =>
+      current.map((item) => (item.localId === localId ? updater(item) : item)),
+    );
+  };
+
+  const handleDeleteQuestion = (localId: string) => {
+    setEditableQuestions((current) => {
+      const index = current.findIndex((item) => item.localId === localId);
+      if (index === -1) return current;
+      const removed = current[index];
+      setDeletedHistory((history) => [...history, { question: removed, index }]);
+      return current.filter((item) => item.localId !== localId);
+    });
+  };
+
+  const handleUndoDelete = () => {
+    setDeletedHistory((history) => {
+      if (history.length === 0) return history;
+      const last = history[history.length - 1];
+      setEditableQuestions((current) => {
+        const next = [...current];
+        const insertAt = Math.min(Math.max(last.index, 0), next.length);
+        next.splice(insertAt, 0, last.question);
+        return next;
+      });
+      return history.slice(0, -1);
+    });
+  };
+
+  const handleAddQuestion = () => {
+    setEditableQuestions((current) => [
+      ...current,
+      createEmptyParsedQuestion(current.length + 1),
+    ]);
+  };
+
+  const handleToggleSelectAll = (checked: boolean) => {
+    setEditableQuestions((current) =>
+      current.map((item) =>
+        item.is_valid && item.saveStatus !== "saved"
+          ? { ...item, selected: checked }
+          : item,
+      ),
+    );
+  };
+
+  const handleMarkQuestionsSaved = (
+    savedIds: Set<string>,
+    failedMap: Map<string, string>,
+  ) => {
+    setEditableQuestions((current) =>
+      current.map((item) => {
+        if (savedIds.has(item.localId)) {
+          return {
+            ...item,
+            selected: false,
+            saveStatus: "saved",
+            saveError: undefined,
+          };
+        }
+        if (failedMap.has(item.localId)) {
+          return {
+            ...item,
+            saveStatus: "error",
+            saveError: failedMap.get(item.localId),
+          };
+        }
+        return item;
+      }),
+    );
+  };
+
+  const handleReparseRawText = async () => {
+    if (!parseResult?.raw_text.trim()) return;
+    try {
+      setReparsingRawText(true);
+      setErrorMessage(null);
+      const reparsed = await parseQuestionsFromText(
+        parseResult.raw_text,
+        parseResult.filename,
+      );
+      setEditableQuestions(toEditableQuestions(reparsed.questions ?? []));
+      setDeletedHistory([]);
+      setDocumentWarnings(reparsed.warnings ?? []);
+      setUnmatchedAnswerKeys(reparsed.unmatched_answer_keys ?? {});
+      setResultView("questions");
+    } catch (err: unknown) {
+      setErrorMessage(extractUploadErrorMessage(err));
+    } finally {
+      setReparsingRawText(false);
     }
   };
 
@@ -480,33 +620,95 @@ export const DocumentParserTab: React.FC = () => {
               </div>
             </div>
 
-            {/* Scrollable Preformatted Raw Text Box */}
-            <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 sm:p-6 shadow-xl">
-              <div className="mb-3 flex items-center justify-between text-xs text-slate-400">
-                <div className="flex items-center gap-2">
-                  <File className="h-4 w-4 text-indigo-400" />
-                  <span className="font-semibold text-slate-200 uppercase tracking-wider">
-                    Văn bản thô đã bóc tách (Raw Extracted Content)
-                  </span>
-                </div>
-                <span className="font-mono text-slate-500">UTF-8 Encoded</span>
+            {/* Result View Switcher */}
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setResultView("questions")}
+                  className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                    resultView === "questions"
+                      ? "bg-indigo-600 text-white shadow-sm"
+                      : "text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  <ListChecks className="h-4 w-4" />
+                  Xem trước & Sửa câu hỏi ({editableQuestions.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setResultView("raw_text")}
+                  className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                    resultView === "raw_text"
+                      ? "bg-indigo-600 text-white shadow-sm"
+                      : "text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  <File className="h-4 w-4" />
+                  Văn bản thô đã bóc tách
+                </button>
               </div>
 
-              <div
-                tabIndex={0}
-                role="region"
-                aria-label="Văn bản thô đã trích xuất"
-                className="max-h-[550px] overflow-y-auto rounded-xl border border-slate-800 bg-slate-900/90 p-4 sm:p-5 font-mono text-sm leading-relaxed text-slate-100 selection:bg-indigo-600 selection:text-white whitespace-pre-wrap break-words"
-              >
-                {parseResult.raw_text.trim().length > 0 ? (
-                  parseResult.raw_text
-                ) : (
-                  <span className="italic text-slate-500">
-                    (Tài liệu không chứa nội dung văn bản có thể trích xuất)
-                  </span>
-                )}
-              </div>
+              {resultView === "raw_text" && (
+                <button
+                  type="button"
+                  disabled={reparsingRawText || !parseResult.raw_text.trim()}
+                  onClick={() => void handleReparseRawText()}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100 disabled:opacity-50"
+                >
+                  {reparsingRawText ? (
+                    <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-3.5 w-3.5" />
+                  )}
+                  Phân tích lại bằng Regex
+                </button>
+              )}
             </div>
+
+            {resultView === "questions" ? (
+              <ParsedQuestionPreviewPanel
+                questions={editableQuestions}
+                documentWarnings={documentWarnings}
+                unmatchedAnswerKeys={unmatchedAnswerKeys}
+                deletedCount={deletedHistory.length}
+                onUpdateQuestion={handleUpdateQuestion}
+                onDeleteQuestion={handleDeleteQuestion}
+                onUndoDelete={handleUndoDelete}
+                onAddQuestion={handleAddQuestion}
+                onToggleSelectAll={handleToggleSelectAll}
+                onMarkQuestionsSaved={handleMarkQuestionsSaved}
+                onQuestionsSaved={onQuestionsSaved}
+              />
+            ) : (
+              /* Scrollable Preformatted Raw Text Box */
+              <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 sm:p-6 shadow-xl">
+                <div className="mb-3 flex items-center justify-between text-xs text-slate-400">
+                  <div className="flex items-center gap-2">
+                    <File className="h-4 w-4 text-indigo-400" />
+                    <span className="font-semibold text-slate-200 uppercase tracking-wider">
+                      Văn bản thô đã bóc tách (Raw Extracted Content)
+                    </span>
+                  </div>
+                  <span className="font-mono text-slate-500">UTF-8 Encoded</span>
+                </div>
+
+                <div
+                  tabIndex={0}
+                  role="region"
+                  aria-label="Văn bản thô đã trích xuất"
+                  className="max-h-[550px] overflow-y-auto rounded-xl border border-slate-800 bg-slate-900/90 p-4 sm:p-5 font-mono text-sm leading-relaxed text-slate-100 selection:bg-indigo-600 selection:text-white whitespace-pre-wrap break-words"
+                >
+                  {parseResult.raw_text.trim().length > 0 ? (
+                    parseResult.raw_text
+                  ) : (
+                    <span className="italic text-slate-500">
+                      (Tài liệu không chứa nội dung văn bản có thể trích xuất)
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )
       )}

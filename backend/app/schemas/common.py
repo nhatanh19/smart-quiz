@@ -204,6 +204,7 @@ class QuestionBaseSchema(BaseModel):
 
 class QuestionCreateSchema(QuestionBaseSchema):
     """Payload for creating a question in the bank."""
+    source_type: QuestionSource = QuestionSource.MANUAL
 
 
 class QuestionUpdateSchema(BaseModel):

@@ -465,6 +465,37 @@ class QuestionBankApiTests(unittest.TestCase):
             [category_id],
         )
 
+    def test_create_question_preserves_optional_file_parser_source_type(self) -> None:
+        root = "/api/v1/ai-generator/question-bank"
+        base_payload = {
+            "category_id": str(self.category.id),
+            "content": "Câu hỏi trích xuất từ đề thi mẫu",
+            "question_type": "SINGLE_CHOICE",
+            "cognitive_level": "REMEMBER",
+            "level": "MEDIUM",
+            "options": [
+                {"id": "A", "text": "Đúng", "is_correct": True},
+                {"id": "B", "text": "Sai", "is_correct": False},
+            ],
+            "tags": ["parser"],
+            "explanation": "Giải thích mẫu",
+        }
+        default_res = self.client.post(
+            f"{root}/questions",
+            headers=self.instructor_headers,
+            json=base_payload,
+        )
+        self.assertEqual(default_res.status_code, 201)
+        self.assertEqual(default_res.json()["data"]["source_type"], "MANUAL")
+
+        parser_res = self.client.post(
+            f"{root}/questions",
+            headers=self.instructor_headers,
+            json={**base_payload, "source_type": "FILE_PARSER"},
+        )
+        self.assertEqual(parser_res.status_code, 201)
+        self.assertEqual(parser_res.json()["data"]["source_type"], "FILE_PARSER")
+
 
 if __name__ == "__main__":
     unittest.main()
