@@ -83,12 +83,13 @@ class LLMClientAdapter:
         user_prompt: str,
         response_schema: Type[T],
         temperature: float = 0.2,
+        model_name: Optional[str] = None,
     ) -> T:
         """Call an LLM provider and validate its JSON response with a Pydantic model."""
         self._get_client()
         try:
             return await self._generate_with_retry(
-                system_prompt, user_prompt, response_schema, temperature
+                system_prompt, user_prompt, response_schema, temperature, model_name
             )
         except RateLimitError as error:
             logger.error("LLM provider remained rate-limited after three attempts")
@@ -112,6 +113,7 @@ class LLMClientAdapter:
         user_prompt: str,
         response_schema: Type[T],
         temperature: float = 0.2,
+        model_name: Optional[str] = None,
     ) -> T:
         """Request JSON and validate it, retrying only transient provider failures."""
         schema_json = json.dumps(response_schema.model_json_schema(), ensure_ascii=False)
@@ -124,7 +126,7 @@ class LLMClientAdapter:
 
         try:
             response = await self._get_client().chat.completions.create(
-                model=self.model_name,
+                model=model_name or self.model_name,
                 messages=[
                     {"role": "system", "content": augmented_system_prompt},
                     {"role": "user", "content": user_prompt},

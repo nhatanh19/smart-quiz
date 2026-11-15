@@ -131,6 +131,24 @@ class LLMClientTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(settings.LLM_MODEL_NAME, "gemini-2.5-flash")
         self.assertEqual(settings.LLM_TIMEOUT_SECONDS, 15.0)
+        self.assertEqual(settings.AI_TUTOR_TIMEOUT_SECONDS, 15.0)
+        self.assertEqual(settings.AI_TUTOR_MODEL_TIMEOUT_SECONDS, 12.0)
+
+    async def test_model_name_override_passes_through_to_completion_call(self) -> None:
+        self.create.return_value = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content='{"value": 9}')
+                )
+            ]
+        )
+
+        result = await self.adapter.generate_structured_json(
+            "System", "User", GeneratedResponse, model_name="backup-fast-model"
+        )
+
+        self.assertEqual(result, GeneratedResponse(value=9))
+        self.assertEqual(self.create.await_args.kwargs["model"], "backup-fast-model")
 
     def test_client_uses_environment_key_and_configured_timeout(self) -> None:
         with patch("app.core.llm_client.AsyncOpenAI") as openai_client:

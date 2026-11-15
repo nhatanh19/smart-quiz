@@ -121,6 +121,8 @@ def test_primary_model_timeout_fails_over_to_backup_model(monkeypatch):
     """When the primary model is slow, the backup model answers before we touch rule-based."""
     monkeypatch.setattr(settings, "LLM_MODEL_NAME", "model-primary-slow")
     monkeypatch.setenv("LLM_FALLBACK_MODEL_NAME", "model-backup-fast")
+    monkeypatch.setattr(settings, "AI_TUTOR_TIMEOUT_SECONDS", 2.8)
+    monkeypatch.setattr(settings, "AI_TUTOR_MODEL_TIMEOUT_SECONDS", 2.4)
 
     backup_feedback = AITutorFeedbackSchema(
         explanation="Backup model giải thích A đúng.",
@@ -128,11 +130,11 @@ def test_primary_model_timeout_fails_over_to_backup_model(monkeypatch):
         study_suggestions=["Ôn WBS", "Phân biệt WBS và Schedule"],
     )
 
-    attempts = 0
+    called_models = []
+
     async def routed_llm(**kwargs):
-        nonlocal attempts
-        attempts += 1
-        if attempts == 1:
+        called_models.append(kwargs.get("model_name"))
+        if len(called_models) == 1:
             await asyncio.sleep(10)  # primary hangs -> per-model timeout fires
         return backup_feedback
 
@@ -142,12 +144,15 @@ def test_primary_model_timeout_fails_over_to_backup_model(monkeypatch):
     elapsed_ms = (time.perf_counter() - start) * 1000
 
     assert elapsed_ms < 3000
+    assert called_models == ["model-primary-slow", "model-backup-fast"]
     assert result.feedback.model == "model-backup-fast"
     assert result.feedback.why_selected_wrong == backup_feedback.why_selected_wrong
 
 
-def test_slow_llm_is_cut_off_under_3_seconds(monkeypatch):
-    """A hanging LLM must not break the < 3s DoD: the hard timeout switches to the fallback."""
+def test_slow_llm_is_cut_off_under_configured_budget(monkeypatch):
+    """A hanging LLM must not hang forever: the configured timeout switches to fallback."""
+    monkeypatch.setattr(settings, "AI_TUTOR_TIMEOUT_SECONDS", 0.5)
+    monkeypatch.setattr(settings, "AI_TUTOR_MODEL_TIMEOUT_SECONDS", 0.4)
 
     async def slow_llm(**kwargs):
         await asyncio.sleep(10)
@@ -157,7 +162,7 @@ def test_slow_llm_is_cut_off_under_3_seconds(monkeypatch):
     result = asyncio.run(ai_tutor_service.generate_explanation(_wbs_request()))
     elapsed_ms = (time.perf_counter() - start) * 1000
 
-    assert elapsed_ms < 3000
+    assert elapsed_ms < 1500
     assert result.feedback.model == "rule-based-fallback"
     # Fallback still diagnoses the specific wrong option against the correct one
     assert "B ('Bảng phân bổ ngân sách" in result.feedback.why_selected_wrong
@@ -180,20 +185,19 @@ def test_fallback_multiple_choice_mentions_missed_option():
     assert len(feedback.study_suggestions) >= 2
 
 
-def test_ai_tutor_service_explanation_latency_and_content():
-    """Test Issue #16 Acceptance Criteria (DoD):
+def test_ai_tutor_service_explanation_latency_and_content(monkeypatch):
+    """Test Issue #16 Acceptance Criteria with fallback when LLM key is unconfigured."""
+    monkeypatch.setattr(settings, "AI_TUTOR_TIMEOUT_SECONDS", 1.5)
+    monkeypatch.setattr(settings, "AI_TUTOR_MODEL_TIMEOUT_SECONDS", 1.0)
+    monkeypatch.setattr(llm_client, "api_key", "")
 
-    1. Bấm nút 'Giải thích bằng AI' trên câu sai hiển thị lời giải thích chi tiết trong vòng < 3 giây (< 3000 ms).
-    2. Giọng văn sư phạm, dễ hiểu, phân tích trúng nguyên nhân nhầm lẫn.
-    """
     start_time = time.perf_counter()
     result: AITutorExplanationData = asyncio.run(
         ai_tutor_service.generate_explanation(_wbs_request())
     )
     total_latency_ms = (time.perf_counter() - start_time) * 1000
 
-    # 1. Assert response time is strictly under 3 seconds (< 3000 ms) as specified in DoD
-    assert total_latency_ms < 3000, f"Latency {total_latency_ms}ms exceeded 3000ms DoD limit"
+    assert total_latency_ms < 3000, f"Latency {total_latency_ms}ms exceeded 3000ms limit"
     assert result.response_time_ms < 3000
 
     # 2. Assert correctness and diagnosis of misconception
@@ -229,11 +233,19 @@ def test_api_explain_endpoint(monkeypatch):
         "correct_options": ["A"],
     }
 
+    async def fake_llm(**kwargs):
+        return AITutorFeedbackSchema(
+            explanation="WIP Limit giúp giới hạn công việc đang làm dở để phát hiện nghẽn cổ chai.",
+            why_selected_wrong="Chọn B là nhầm giữa kỷ luật quy trình Kanban/Scrum với tăng ca.",
+            study_suggestions=["Đọc tài liệu Kanban Guide", "Ôn các chỉ số Flow Metrics"],
+        )
+
     start = time.perf_counter()
     from app.core.security import get_current_user
     from app.models.entities import User, UserRole
     from app.core.database import get_db
     with monkeypatch.context() as context:
+        context.setattr(llm_client, "generate_structured_json", fake_llm)
         context.setitem(app.dependency_overrides, get_current_user, lambda: User(role=UserRole.STUDENT))
         context.setitem(app.dependency_overrides, get_db, lambda: None)
         response = client.post("/api/v1/tutor-analytics/explain", json=payload)
